@@ -29,8 +29,8 @@ def create_item(price: int):
     :param price:
     :return: Stock
     """
-    s = Stock(price)
-    db.set(s.id, s.dumps())
+    s = Stock(int(price))
+    db.set(s.item_id, s.dumps())
     return s.dumps()
 
 
@@ -55,7 +55,7 @@ def add_stock(item_id: str, amount: int):
     d = db.get(item_id)
     s = Stock.loads(d)
     s.stock += int(amount)
-    db.set(s.id, s.dumps())
+    db.set(s.item_id, s.dumps())
     return s.dumps()
 
 
@@ -67,8 +67,11 @@ def remove_stock(item_id: str, amount: int):
     :param amount: The amount to remove from the stock.
     :return: Stock item.
     """
+    amount = int(amount)
     d = db.get(item_id)
     s = Stock.loads(d)
-    s.stock -= int(amount)
-    db.set(s.id, s.dumps())
+    if s.stock - amount < 0:
+        return "Not enough stock", 400
+    s.stock -= amount
+    db.set(s.item_id, s.dumps())
     return s.dumps()

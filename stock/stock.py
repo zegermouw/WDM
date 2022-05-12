@@ -7,7 +7,7 @@ import json
 class Stock:
     """Class for keeping track of an item in inventory."""
     price: float
-    id: str = uuid.uuid4().hex
+    item_id: str = uuid.uuid4().hex
     stock: int = 0
 
     def dumps(self):
