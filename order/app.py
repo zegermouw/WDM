@@ -1,5 +1,6 @@
 import os
 import atexit
+from pymongo import MongoClient
 
 from flask import Flask
 
@@ -7,13 +8,8 @@ gateway_url = os.environ['GATEWAY_URL']
 
 app = Flask("order-service")
 
-# db: redis.Redis = redis.Redis(host=os.environ['order-db'],
-#                               port=int(os.environ['6379']),
-#                               password=os.environ['redis'],
-#                               db=int(os.environ['0']))
-
-
-db = None  # TODO: add mongo instance
+client = MongoClient('HOST HERE', 'PORT HERE')
+db = client['DATABASE NAME HERE']
 
 
 def close_db_connection():
@@ -22,7 +18,8 @@ def close_db_connection():
 
 atexit.register(close_db_connection)
 
-#TODO: handle error handling for when mongodb fails.
+
+# TODO: handle error handling for when mongodb fails.
 
 @app.post('/create/<user_id>')
 def create_order(user_id):
@@ -55,7 +52,6 @@ def remove_item(order_id, item_id):
     else:
         print('this does not exist')
         return f'Item {item_id} does not exist', 400
-
 
 
 @app.get('/find/<order_id>')
