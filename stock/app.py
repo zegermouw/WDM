@@ -1,11 +1,9 @@
 import os
 import atexit
-
 from flask import Flask
 import redis
 from stock import Stock
 
-import json
 
 app = Flask("stock-service")
 
