@@ -1,17 +1,15 @@
-import os
 import atexit
+import os
+from enum import Enum
 
 from flask import Flask
-import redis
-
+from pymongo import MongoClient
 
 app = Flask("payment-service")
 
-db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
-                              port=int(os.environ['REDIS_PORT']),
-                              password=os.environ['REDIS_PASSWORD'],
-                              db=int(os.environ['REDIS_DB']))
 
+client = MongoClient(os.environ['GATEWAY_URL'], 27017)
+db = client['local']
 
 def close_db_connection():
     db.close()
@@ -19,6 +17,23 @@ def close_db_connection():
 
 atexit.register(close_db_connection)
 
+
+# USER {
+#   user_id: str
+#   credit: int
+#   orders: [
+#       Order {
+#           order_id: str
+#           credit_paid: int
+#           status: Status
+#       }
+#   ]
+# }
+
+class OrderStatus(Enum):
+    IN_TRANSACTION = 0
+    PROCESSED = 1
+    CANCELLED = 2
 
 @app.post('/create_user')
 def create_user():

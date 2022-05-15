@@ -37,7 +37,7 @@ services:
     image: user:latest
     command: gunicorn -b 0.0.0.0:5000 app:app
     env_file:
-      - env/payment_redis.env
+      - env/payment_mongo.env
 
   payment-db:
     image: redis:latest
