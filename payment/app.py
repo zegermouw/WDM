@@ -11,9 +11,6 @@ app = Flask("payment-service")
 client = MongoClient(os.environ['GATEWAY_URL'], 27017)
 db = client['local']
 
-client = MongoClient(os.environ['GATEWAY_URL'], 27017)
-db = client['local']
-
 def close_db_connection():
     db.close()
 
@@ -81,12 +78,16 @@ def create_user():
 
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
-    pass
+    return find_user(user_id), 200
 
 
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: int):
-    pass
+    db.payment.find_one_and_update(
+        {'_id': ObjectId(user_id)},
+        {'$inc': {'credit': amount}}
+    )
+    return find_user(user_id), 200
 
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
