@@ -11,6 +11,8 @@ app = Flask("payment-service")
 client = MongoClient(os.environ['GATEWAY_URL'], 27017)
 db = client['local']
 
+client = MongoClient(os.environ['GATEWAY_URL'], 27017)
+db = client['local']
 
 def close_db_connection():
     db.close()
@@ -54,6 +56,23 @@ def find_order(user_id: str, order_id: str):
 # endregion
 
 # region ENDPOINTS
+
+# USER {
+#   user_id: str
+#   credit: int
+#   orders: [
+#       Order {
+#           order_id: str
+#           credit_paid: int
+#           status: Status
+#       }
+#   ]
+# }
+
+class OrderStatus(Enum):
+    IN_TRANSACTION = 0
+    PROCESSED = 1
+    CANCELLED = 2
 
 @app.post('/create_user')
 def create_user():
