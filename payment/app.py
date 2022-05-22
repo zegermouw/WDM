@@ -3,31 +3,44 @@ import atexit
 
 from flask import Flask
 import redis
+import json
+
+from bson import json_util
+import pydantic
+import pymongo
+from bson.objectid import ObjectId
+
+from models import User
 
 
 app = Flask("payment-service")
 
-db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
-                              port=int(os.environ['REDIS_PORT']),
-                              password=os.environ['REDIS_PASSWORD'],
-                              db=int(os.environ['REDIS_DB']))
+# db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
+#                               port=int(os.environ['REDIS_PORT']),
+#                               password=os.environ['REDIS_PASSWORD'],
+#                               db=int(os.environ['REDIS_DB']))
 
+myclient = pymongo.MongoClient("mongodb://payment-db:27017/db", 27017)
+db = myclient["local"]
+# col = db["users"]
 
 def close_db_connection():
-    db.close()
+    myclient.close()
 
 
 atexit.register(close_db_connection)
 
-
 @app.post('/create_user')
 def create_user():
-    pass
+    user = User()
+    user_id = db.users.insert_one(user.dict()).inserted_id
+    return str(user_id), 200
 
 
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
-    pass
+    user = db.users.find_one({"_id": ObjectId(user_id)})
+    return str(json.dumps(user, default=json_util.default)), 200
 
 
 @app.post('/add_funds/<user_id>/<amount>')
