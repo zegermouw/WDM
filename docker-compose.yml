@@ -48,5 +48,9 @@ services:
       - env/payment_mongo.env
 
   payment-db:
-    image: redis:latest
-    command: redis-server --requirepass redis --maxmemory 512mb
+    container_name: payment-db
+    image: mongo:latest
+    ports:
+      - 27017:27017
+    volumes:
+      - ./mongodb_data_container:/data/db

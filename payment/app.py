@@ -4,15 +4,31 @@ from enum import Enum
 
 from bson.objectid import ObjectId
 from flask import Flask
-from pymongo import MongoClient
+
+import redis
+import json
+
+from bson import json_util
+import pydantic
+import pymongo
+from bson.objectid import ObjectId
+
+from models import User
+
 
 app = Flask("payment-service")
 
-client = MongoClient(os.environ['GATEWAY_URL'], 27017)
-db = client['local']
+# db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
+#                               port=int(os.environ['REDIS_PORT']),
+#                               password=os.environ['REDIS_PASSWORD'],
+#                               db=int(os.environ['REDIS_DB']))
+
+myclient = pymongo.MongoClient("mongodb://payment-db:27017/db", 27017)
+db = myclient["local"]
+# col = db["users"]
 
 def close_db_connection():
-    db.close()
+    myclient.close()
 
 
 atexit.register(close_db_connection)
@@ -22,7 +38,7 @@ atexit.register(close_db_connection)
 # USER {
 #   _id: str
 #   credit: int
-#   orders: [
+#   payments: [
 #       Order {
 #           order_id: str
 #           credit_paid: int
@@ -46,39 +62,25 @@ def find_user(user_id: str):
 def find_order(user_id: str, order_id: str):
     return db.payment.aggregate([
         {'$match': {'_id': ObjectId(user_id)}},
-        {'$unwind': '$orders'},
-        {'$match': {'orders.order_id': order_id}}
-    ]).next()['orders']
+        {'$unwind': '$payments'},
+        {'$match': {'payments.order_id': order_id}}
+    ]).next()['payments']
 
 # endregion
 
 # region ENDPOINTS
 
-# USER {
-#   user_id: str
-#   credit: int
-#   orders: [
-#       Order {
-#           order_id: str
-#           credit_paid: int
-#           status: Status
-#       }
-#   ]
-# }
-
-class OrderStatus(Enum):
-    IN_TRANSACTION = 0
-    PROCESSED = 1
-    CANCELLED = 2
-
 @app.post('/create_user')
 def create_user():
-    pass
+    user = User()
+    user_id = db.users.insert_one(user.dict()).inserted_id
+    return str(user_id), 200
 
 
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
-    return find_user(user_id), 200
+    user = find_user(user_id), 200
+    return str(json.dumps(user, default=json_util.default)), 200
 
 
 @app.post('/add_funds/<user_id>/<amount>')
@@ -100,8 +102,8 @@ def remove_credit(user_id: str, order_id: str, amount: int):
         {'$inc': {'credit': -amount}}
     )
     db.payment.find_one_and_update(
-        {'_id': ObjectId(user_id), 'orders.order_id': order_id},
-        {'$inc': {'orders.$.credit_paid': amount}}
+        {'_id': ObjectId(user_id), 'payments.order_id': order_id},
+        {'$inc': {'payments.$.credit_paid': amount}}
     )
 
     return find_order(user_id, order_id), 200
@@ -110,8 +112,8 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
     db.payment.find_one_and_update(
-        {'_id': ObjectId(user_id), 'orders.order_id': order_id},
-        {'$set': {'orders.$.status': f'{OrderStatus.CANCELLED}'}}
+        {'_id': ObjectId(user_id), 'payments.order_id': order_id},
+        {'$set': {'payments.$.status': f'{OrderStatus.CANCELLED}'}}
     )
 
     return find_order(user_id, order_id), 200
