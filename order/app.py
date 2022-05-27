@@ -1,6 +1,7 @@
 import os
 import atexit
 import json
+
 from pymongo import MongoClient
 from flask import Flask
 from bson import json_util
@@ -10,7 +11,7 @@ gateway_url = os.environ['GATEWAY_URL']
 
 app = Flask("order-service")
 
-client = MongoClient('mongodb://order-db:27017/db', 27017)
+client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
 
 

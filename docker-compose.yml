@@ -11,19 +11,18 @@ services:
   order-db:
     container_name: order-db
     image: mongo
+    command: mongod --port 27018
     volumes:
       - ./data:/data/db
     ports:
-      - "27017:27017"
+      - "27018:27018"
 
   order-service:
     build: ./order
     image: order:latest
-    environment:
-      - GATEWAY_URL=http://gateway:80
     command: gunicorn -b 0.0.0.0:5000 app:app
     env_file:
-      - env/order_redis.env
+      - env/order_mongo.env
 
 #  order-db:
 #    image: redis:latest
@@ -36,21 +35,21 @@ services:
     env_file:
       - env/stock_redis.env
 
-  stock-db:
-    image: redis:latest
-    command: redis-server --requirepass redis --maxmemory 512mb
+#  stock-db:
+#    image: redis:latest
+#    command: redis-server --requirepass redis --maxmemory 512mb
 
   payment-service:
     build: ./payment
-    image: user:latest
+    image: payment:latest
     command: gunicorn -b 0.0.0.0:5000 app:app
     env_file:
       - env/payment_mongo.env
 
   payment-db:
     container_name: payment-db
-    image: mongo:latest
+    image: mongo
     ports:
-      - "27018:27018"
+      - "27017:27017"
     volumes:
       - ./mongodb_data_container:/data/db

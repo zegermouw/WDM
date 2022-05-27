@@ -15,16 +15,12 @@ from bson.objectid import ObjectId
 
 from models import User
 
-
 app = Flask("payment-service")
 
-# db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
-#                               port=int(os.environ['REDIS_PORT']),
-#                               password=os.environ['REDIS_PASSWORD'],
-#                               db=int(os.environ['REDIS_DB']))
-
-myclient = pymongo.MongoClient("mongodb://payment-db:27018/db", 27018)
+myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
+
+
 # col = db["users"]
 
 def close_db_connection():
@@ -33,24 +29,14 @@ def close_db_connection():
 
 atexit.register(close_db_connection)
 
-# region MODEL
 
-# USER {
-#   _id: str
-#   credit: int
-#   payments: [
-#       Order {
-#           order_id: str
-#           credit_paid: int
-#           status: Status
-#       }
-#   ]
-# }
+# region MODEL
 
 class OrderStatus(str, Enum):
     IN_TRANSACTION = 'IN_TRANSACTION'
     PROCESSED = 'PROCESSED'
     CANCELLED = 'CANCELLED'
+
 
 # endregion
 
@@ -59,12 +45,14 @@ class OrderStatus(str, Enum):
 def find_user(user_id: str):
     return db.payment.find_one({'_id': ObjectId(user_id)})
 
+
 def find_order(user_id: str, order_id: str):
     return db.payment.aggregate([
         {'$match': {'_id': ObjectId(user_id)}},
         {'$unwind': '$payments'},
         {'$match': {'payments.order_id': order_id}}
     ]).next()['payments']
+
 
 # endregion
 
