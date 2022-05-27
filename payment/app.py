@@ -23,7 +23,7 @@ app = Flask("payment-service")
 #                               password=os.environ['REDIS_PASSWORD'],
 #                               db=int(os.environ['REDIS_DB']))
 
-myclient = pymongo.MongoClient("mongodb://payment-db:27017/db", 27017)
+myclient = pymongo.MongoClient("mongodb://payment-db:27018/db", 27018)
 db = myclient["local"]
 # col = db["users"]
 

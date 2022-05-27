@@ -51,6 +51,6 @@ services:
     container_name: payment-db
     image: mongo:latest
     ports:
-      - 27017:27017
+      - "27018:27018"
     volumes:
       - ./mongodb_data_container:/data/db
