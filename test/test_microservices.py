@@ -139,6 +139,7 @@ class TestMicroservices(unittest.TestCase):
         self.assertEqual(stock_after_subtract, 14)
 
         credit: int = tu.find_user(user_id)['credit']
+
         self.assertEqual(credit, 5)
 
 

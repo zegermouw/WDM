@@ -27,7 +27,7 @@ def create_item(price: int):
     :param price:
     :return: Stock
     """
-    s = Stock(int(price))
+    s = Stock.new(int(price))
     db.set(s.item_id, s.dumps())
     return s.dumps()
 

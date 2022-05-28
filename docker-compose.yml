@@ -25,7 +25,7 @@ services:
       - env/order_mongo.env
 
 #  order-db:
-#    image: redis:latest
+#    image: redis:latesta
 #    command: redis-server --requirepass redis --maxmemory 512mb
 
   stock-service:
@@ -35,9 +35,9 @@ services:
     env_file:
       - env/stock_redis.env
 
-#  stock-db:
-#    image: redis:latest
-#    command: redis-server --requirepass redis --maxmemory 512mb
+  stock-db:
+    image: redis:latest
+    command: redis-server --requirepass redis --maxmemory 512mb
 
   payment-service:
     build: ./payment

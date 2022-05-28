@@ -2,15 +2,13 @@ import atexit
 import os
 from enum import Enum
 
-from bson.objectid import ObjectId
 from flask import Flask
 
-import redis
 import json
 
 from bson import json_util
-import pydantic
 import pymongo
+from pymongo import ReturnDocument
 from bson.objectid import ObjectId
 
 from models import User
@@ -20,8 +18,6 @@ app = Flask("payment-service")
 myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
 
-
-# col = db["users"]
 
 def close_db_connection():
     myclient.close()
@@ -36,22 +32,19 @@ class OrderStatus(str, Enum):
     IN_TRANSACTION = 'IN_TRANSACTION'
     PROCESSED = 'PROCESSED'
     CANCELLED = 'CANCELLED'
+    PAYED = 'PAYED'
 
 
 # endregion
 
 # region SERVICES
 
-def find_user(user_id: str):
-    return db.payment.find_one({'_id': ObjectId(user_id)})
 
 
-def find_order(user_id: str, order_id: str):
-    return db.payment.aggregate([
-        {'$match': {'_id': ObjectId(user_id)}},
-        {'$unwind': '$payments'},
-        {'$match': {'payments.order_id': order_id}}
-    ]).next()['payments']
+def find_user_by_id(user_id):
+    user = db.users.find_one({'_id': ObjectId(user_id)})
+    user['user_id'] = str(user.pop('_id'))
+    return user
 
 
 # endregion
@@ -62,53 +55,69 @@ def find_order(user_id: str, order_id: str):
 def create_user():
     user = User()
     user_id = db.users.insert_one(user.dict()).inserted_id
-    return str(user_id), 200
+    return json.dumps({'user_id': str(user_id)}), 200
 
 
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
-    user = find_user(user_id), 200
+    user = find_user_by_id(user_id)
     return str(json.dumps(user, default=json_util.default)), 200
 
 
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: int):
-    db.payment.find_one_and_update(
+    amount = int(amount)
+    user = db.users.find_one_and_update(
         {'_id': ObjectId(user_id)},
-        {'$inc': {'credit': amount}}
+        {'$inc': {'credit': amount}},
+        return_document=ReturnDocument.AFTER
     )
-    return find_user(user_id), 200
+    user['user_id'] = str(user.pop('_id'))
+    return json.dumps(user), 200
 
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
 def remove_credit(user_id: str, order_id: str, amount: int):
-    if find_user(user_id)['credit'] < amount:
+    amount = int(amount)
+    user = find_user_by_id(user_id)
+    if user['credit'] < amount:
         return 'Insufficient credit', 400
 
-    db.payment.find_one_and_update(
+    # TODO check if this update returns ok status
+    db.users.find_one_and_update(
         {'_id': ObjectId(user_id)},
-        {'$inc': {'credit': -amount}}
-    )
-    db.payment.find_one_and_update(
-        {'_id': ObjectId(user_id), 'payments.order_id': order_id},
-        {'$inc': {'payments.$.credit_paid': amount}}
+        {'$inc': {'credit': -amount}},
     )
 
-    return find_order(user_id, order_id), 200
+    payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
+    db.payments.insert_one(payment)
+    payment['payment_id'] = str(payment.pop('_id'))
+    return json.dumps(payment), 200
 
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
-    db.payment.find_one_and_update(
+    """
+    Cancels the payment (should this method alsoa dd the amount of the order
+    back to the users account?)
+    :param user_id:
+    :param order_id:
+    :return: payment
+    """
+    payment = db.payments.find_one_and_update(
         {'_id': ObjectId(user_id), 'payments.order_id': order_id},
-        {'$set': {'payments.$.status': f'{OrderStatus.CANCELLED}'}}
+        {'$set': {'payments.$.status': f'{OrderStatus.CANCELLED}'}},
+        return_document=ReturnDocument.AFTER
     )
-
-    return find_order(user_id, order_id), 200
+    payment['payment_id'] = str(payment.pop('_id'))
+    return json.dumps(payment), 200
 
 
 @app.post('/status/<user_id>/<order_id>')
 def payment_status(user_id: str, order_id: str):
-    return find_order(user_id, order_id)['status'], 200
+    payment = db.payments.find_one(
+        {'_id': ObjectId(user_id), 'payments.order_id': order_id}
+    )
+    return payment['status'], 200
 
 # endregion

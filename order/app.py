@@ -1,11 +1,13 @@
 import os
 import atexit
-import json
+from orderutils import subtract_stock, find_item, payment_pay, add_stock
 
 from pymongo import MongoClient
 from flask import Flask
 from bson import json_util
 from bson.objectid import ObjectId
+
+from order import Order
 
 gateway_url = os.environ['GATEWAY_URL']
 
@@ -27,9 +29,10 @@ atexit.register(close_db_connection)
 
 @app.post('/create/<user_id>')
 def create_order(user_id):
-    order = {'user_id:': user_id}
-    order_id = db.orders.insert_one(order).inserted_id
-    return str(order_id), 200
+    order = Order(user_id=user_id)
+    db.orders.insert_one(order.__dict__)
+    order.order_id = str(order.__dict__.pop('_id'))  # Since order should have order_id instead of _id.
+    return order.dumps(), 200
 
 
 @app.delete('/remove/<order_id>')
@@ -40,10 +43,11 @@ def remove_order(order_id):
 
 @app.post('/addItem/<order_id>/<item_id>')
 def add_item(order_id, item_id):
-    order = db.orders.find_one({"_id": ObjectId(order_id)})
-    order.setdefault('items', []).append(item_id)
-    db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order}, upsert=False)
-    return f'Added item: {item_id}', 200
+    j = db.orders.find_one({"_id": ObjectId(order_id)})
+    order = Order.loads(j)
+    order.items.append(item_id)
+    db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
+    return order.dumps(), 200
 
 
 @app.delete('/removeItem/<order_id>/<item_id>')
@@ -61,9 +65,40 @@ def remove_item(order_id, item_id):
 @app.get('/find/<order_id>')
 def find_order(order_id):
     order = db.orders.find_one({"_id": ObjectId(order_id)})
-    return str(json.dumps(order, default=json_util.default)), 200
+    order = Order.loads(order)
+    return order.dumps(), 200
 
 
 @app.post('/checkout/<order_id>')
 def checkout(order_id):
-    pass
+    """
+        Reserve stock from stock service and request payment from payment service
+            - if stock service has not enough stock for one item, rollback
+            - if pyment service fails payment: rollback items.
+    """
+    order = db.orders.find_one({"_id": ObjectId(order_id)})
+    order = Order.loads(order)
+
+    total_checkout_amount: int = 0
+    reserved_items = []
+    for item_id in order.items:
+        request = subtract_stock(item_id, 1)
+        if request.status_code == 400:
+            # One item has not enough stock, roll back other reserved items
+            rollback_items(reserved_items)
+            return "not enough stock", 400
+        item = request.json()
+        total_checkout_amount += item['price']
+        reserved_items.append(item_id)
+
+    payment_status: int = payment_pay(order.user_id, order_id, total_checkout_amount)
+    if payment_status == 400:
+        rollback_items(reserved_items)
+        return "not enough mony", 400
+
+    return order.dumps(), 200
+
+
+def rollback_items(items):
+    for item_id in items:
+        add_stock(item_id, 1)
