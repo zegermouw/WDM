@@ -5,6 +5,8 @@ services:
     image: nginx:latest
     volumes:
       - ./gateway_nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - application-network
     ports:
       - "8000:80"
 
@@ -14,6 +16,8 @@ services:
     command: mongod --port 27018
     volumes:
       - ./data:/data/db
+    networks:
+      - application-network
     ports:
       - "27018:27018"
 
@@ -21,6 +25,8 @@ services:
     build: ./order
     image: order:latest
     command: gunicorn -b 0.0.0.0:5000 app:app
+    networks:
+      - application-network
     env_file:
       - env/order_mongo.env
 
@@ -32,24 +38,61 @@ services:
     build: ./stock
     image: stock:latest
     command: gunicorn -b 0.0.0.0:5000 app:app
+    networks:
+      - application-network
     env_file:
       - env/stock_redis.env
 
   stock-db:
     image: redis:latest
     command: redis-server --requirepass redis --maxmemory 512mb
+    networks:
+      - application-network
 
   payment-service:
     build: ./payment
     image: payment:latest
     command: gunicorn -b 0.0.0.0:5000 app:app
+    networks:
+      - application-network
     env_file:
       - env/payment_mongo.env
 
   payment-db:
     container_name: payment-db
     image: mongo
+    networks:
+      - application-network
     ports:
       - "27017:27017"
+    # volumes:
+    #   - ./mongodb_data_container:/data/db
     volumes:
-      - ./mongodb_data_container:/data/db
+      - type: volume
+        source: payment-mongo-data
+        target: /data/db
+      - type: volume
+        source: payment-mongo-config
+        target: /data/configdb
+  
+  payment-db-express:
+    image: mongo-express
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=payment-db
+      - ME_CONFIG_MONGODB_PORT=27017
+    depends_on:
+      - payment-db
+    networks:
+      - application-network
+    ports:
+      - "8065:8081"
+
+networks:
+  application-network:
+    name: application-network
+
+volumes:
+  payment-mongo-data:
+    name: payment-mongo-data
+  payment-mongo-config:
+    name: payment-mongo-config

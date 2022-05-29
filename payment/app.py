@@ -32,7 +32,7 @@ class OrderStatus(str, Enum):
     IN_TRANSACTION = 'IN_TRANSACTION'
     PROCESSED = 'PROCESSED'
     CANCELLED = 'CANCELLED'
-    PAYED = 'PAYED'
+    PAID = 'PAID'
 
 
 # endregion
@@ -89,7 +89,7 @@ def remove_credit(user_id: str, order_id: str, amount: int):
         {'$inc': {'credit': -amount}},
     )
 
-    payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
+    payment = {'user_id': user_id, 'status': OrderStatus.PAID}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))
     return json.dumps(payment), 200
@@ -98,7 +98,7 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
     """
-    Cancels the payment (should this method alsoa dd the amount of the order
+    Cancels the payment (should this method also dd the amount of the order
     back to the users account?)
     :param user_id:
     :param order_id:
