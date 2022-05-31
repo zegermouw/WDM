@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: order-service
+  name: payment-service
 spec:
   type: ClusterIP
   selector:
-    component: order
+    component: payment
   ports:
     - port: 5000
       name: http
@@ -14,20 +14,20 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: order-deployment
+  name: payment-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      component: order
+      component: payment
   template:
     metadata:
       labels:
-        component: order
+        component: payment
     spec:
       containers:
-        - name: order
-          image: order:latest
+        - name: payment
+          image: payment:latest
           resources:
             limits:
               memory: "1Gi"
@@ -40,51 +40,43 @@ spec:
           ports:
             - containerPort: 5000
           env:
-            - name: USER_SERVICE_URL
-              value: "payment-service"
-            - name: STOCK_SERVICE_URL
-              value: "stock-service"
             - name: GATEWAY_URL
-              value: mongodb://order-db:27018/db
+              value: mongodb://payment-db:27017/db
             - name: PORT
-              value: "27018"
+              value: "27017"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: order-db-service
+  name: payment-db-service
 spec:
   ports:
-    - name: "27018"
-      port: 27018
-      targetPort: 27018
+    - name: "27017"
+      port: 27017
+      targetPort: 27017
   selector:
-    component: order-db
+    component: payment-db
 status:
   loadBalancer: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: order-db
+  name: payment-db
 spec:
   replicas: 1
   selector:
     matchLabels:
-      component: order-db
+      component: payment-db
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        component: order-db
+        component: payment-db
     spec:
       containers:
-        - args:
-            - mongod
-            - --port
-            - "27018"
-          image: mongo
-          name: order-db
+        - image: mongo
+          name: payment-db
           ports:
-            - containerPort: 27018
+            - containerPort: 27017
