@@ -40,7 +40,6 @@ class OrderStatus(str, Enum):
 # region SERVICES
 
 
-
 def find_user_by_id(user_id):
     user = db.users.find_one({'_id': ObjectId(user_id)})
     user['user_id'] = str(user.pop('_id'))
@@ -82,13 +81,15 @@ def remove_credit(user_id: str, order_id: str, amount: int):
     user = find_user_by_id(user_id)
     if user['credit'] < amount:
         return 'Insufficient credit', 400
+    # block user account from removing/adding credit
+    # send ready to commit to coordinator
 
+    # On commit response:
     # TODO check if this update returns ok status
     db.users.find_one_and_update(
         {'_id': ObjectId(user_id)},
         {'$inc': {'credit': -amount}},
     )
-
     payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))
@@ -119,5 +120,23 @@ def payment_status(user_id: str, order_id: str):
         {'_id': ObjectId(user_id), 'payments.order_id': order_id}
     )
     return payment['status'], 200
+
+
+@app.post('/prepare-pay/<user_id>/<order_id>/<amount>')
+def prepare_pay(user_id: str, order_id: str, amount: float):
+    # here we should freeze the account of user_id
+    return '', 200
+
+
+@app.post('/rollback-pay/<user_id>/<order_id>/<amount>')
+def rollback_pay(user_id: str, order_id: str, amount: float):
+    # here we should roll back any changes and remove the locks
+    return '', 200
+
+
+@app.post('/commit-pay/<user_id>/<order_id>/<amount>')
+def commit_pay(user_id: str, order_id: str, amount: float):
+    # here we can debit the account and remove the lock
+    return '', 200
 
 # endregion

@@ -46,6 +46,11 @@ services:
     env_file:
       - env/payment_mongo.env
 
+  coordinator-service:
+    build: ./coordinator
+    image: coordinator:latest
+    command: gunicorn -b 0.0.0.0:5000 app:app
+
   payment-db:
     container_name: payment-db
     image: mongo

@@ -99,6 +99,24 @@ def checkout(order_id):
     return order.dumps(), 200
 
 
+@app.post('/prepare-checkout/<order_id>')
+def prepare_checkout(order_id):
+    # here we should freeze the order
+    return '', 200
+
+
+@app.post('/rollback-checkout/<order_id>')
+def rollback_checkout(order_id):
+    # here we roll back any changes and remove the lock
+    return '', 200
+
+
+@app.post('/commit-checkout/<order_id>')
+def commit_checkout(order_id):
+    # here we update the status of the order to paid
+    return '', 200
+
+
 def rollback_items(items):
     for item_id in items:
         add_stock(item_id, 1)

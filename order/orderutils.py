@@ -1,10 +1,10 @@
 import requests
+
 ORDER_URL = STOCK_URL = PAYMENT_URL = "http://host.docker.internal:8000"
 
 
 def subtract_stock(item_id: str, amount: int) -> (dict, int):
     return requests.post(f"{STOCK_URL}/stock/subtract/{item_id}/{amount}")
-
 
 
 def find_item(item_id: str) -> dict:
