@@ -4,15 +4,15 @@ ORDER_URL = STOCK_URL = PAYMENT_URL = "http://host.docker.internal:8000"
 
 
 def prepare_checkout(order_id: str) -> int:
-    return requests.post(f"{ORDER_URL}/order/prepare-checkout/{order_id}").status_code
+    return requests.post(f"{ORDER_URL}/orders/prepare-checkout/{order_id}").status_code
 
 
 def rollback_checkout(order_id: str) -> int:
-    return requests.post(f"{ORDER_URL}/order/rollback-checkout/{order_id}").status_code
+    return requests.post(f"{ORDER_URL}/orders/rollback-checkout/{order_id}").status_code
 
 
 def commit_checkout(order_id: str) -> int:
-    return requests.post(f"{ORDER_URL}/order/commit-checkout/{order_id}").status_code
+    return requests.post(f"{ORDER_URL}/orders/commit-checkout/{order_id}").status_code
 
 
 def prepare_pay(user_id: str, order_id: str, amount: float) -> int:

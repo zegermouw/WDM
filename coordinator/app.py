@@ -4,6 +4,11 @@ from coordinatorutils import prepare_checkout, commit_checkout, prepare_pay, com
 app = Flask("coordinator-service")
 
 
+@app.get('/test')
+def test():
+    return 'test successful', 200
+
+
 @app.post('/pay/<order_id>')
 def pay_order(user_id, order_id, amount):
     # send prepare to order --> lock the order, cannot be changed anymore or deleted
@@ -32,6 +37,3 @@ def pay_order(user_id, order_id, amount):
         else:
             # what happens when one rollback succeeds but the other not?
             print('what do we do here?')
-
-
-
