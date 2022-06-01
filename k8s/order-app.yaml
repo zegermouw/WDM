@@ -49,20 +49,6 @@ spec:
             - name: PORT
               value: "27018"
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: order-db-service
-spec:
-  ports:
-    - name: "27018"
-      port: 27018
-      targetPort: 27018
-  selector:
-    component: order-db
-status:
-  loadBalancer: {}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
