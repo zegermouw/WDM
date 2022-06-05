@@ -1,22 +1,27 @@
 import atexit
 import os
 from enum import Enum
-
-from flask import Flask
-
+from flask import Flask, request
 import json
-
+import requests
 from bson import json_util
 import pymongo
 from pymongo import ReturnDocument
 from bson.objectid import ObjectId
 
+
 from models import User
+from paxos import Paxos
 
 app = Flask("payment-service")
 
 myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
+payment_replicas: list[str] = [os.environ['OTHER_NODE']]
+port = '5000'
+for i in range(len(payment_replicas)):
+    s = payment_replicas[i]
+    payment_replicas[i] = s + ':' + port
 
 
 def close_db_connection():
@@ -24,9 +29,11 @@ def close_db_connection():
 
 
 atexit.register(close_db_connection)
-
+base_url = "http://host.docker.internal"
+paxos = Paxos(payment_replicas, base_url, db)
 
 # region MODEL
+
 
 class OrderStatus(str, Enum):
     IN_TRANSACTION = 'IN_TRANSACTION'
@@ -38,7 +45,6 @@ class OrderStatus(str, Enum):
 # endregion
 
 # region SERVICES
-
 
 
 def find_user_by_id(user_id):
@@ -53,9 +59,24 @@ def find_user_by_id(user_id):
 
 @app.post('/create_user')
 def create_user():
+    # TODO create users in replication nodes, can be done asynchronous
+    """
+    Create User and distribute to replicas
+    :return: User object and status 200 if everything ok.
+    """
     user = User()
-    user_id = db.users.insert_one(user.dict()).inserted_id
-    return json.dumps({'user_id': str(user_id)}), 200
+    db.users.insert_one(user.__dict__)
+    user.set_id()
+    for replica in payment_replicas:
+        requests.put(replica+'/create_user', json=user.__dict__)
+    return user.dumps(), 200
+
+
+@app.put('/create_user')
+def insert_user():
+    user = User.loads(request.json)
+    db.users.insert_one({'_id': ObjectId(user.user_id), **user.__dict__})
+    return 'ok', 200
 
 
 @app.get('/find_user/<user_id>')
@@ -67,13 +88,18 @@ def find_user(user_id: str):
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: int):
     amount = int(amount)
-    user = db.users.find_one_and_update(
-        {'_id': ObjectId(user_id)},
-        {'$inc': {'credit': amount}},
-        return_document=ReturnDocument.AFTER
-    )
-    user['user_id'] = str(user.pop('_id'))
-    return json.dumps(user), 200
+    user = find_user_by_id(user_id)
+    user['credit'] += amount
+    response = paxos.proposer_prepare(user)
+    # user = db.users.find_one_and_update(
+    #     {'_id': ObjectId(user_id)},
+    #     {'$inc': {'credit': amount}},
+    #     return_document=ReturnDocument.AFTER
+    # )
+    # TODO return the most recent value.
+    if response == Paxos.ACCEPTED:
+        return 'ACCEPTED', 200
+    return json.dumps(user), 400
 
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
@@ -119,5 +145,24 @@ def payment_status(user_id: str, order_id: str):
         {'_id': ObjectId(user_id), 'payments.order_id': order_id}
     )
     return payment['status'], 200
+
+
+@app.post('/prepare')
+def paxos_acceptor_prepare():
+    content = request.json
+    return paxos.acceptor_prepare(content['proposal_id'], content['proposal_value'])
+
+
+@app.post('/accept')
+def acceptor_accept():
+    content = request.json
+    return paxos.acceptor_accept(content['accepted_id'], content['accepted_value'])
+
+
+@app.get('/hallo')
+def hallo():
+    return json.dumps(payment_replicas), 200
+
+# requests.post("http://host.docker.internal:8000/payment/alive")
 
 # endregion

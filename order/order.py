@@ -2,6 +2,7 @@ import json
 from dataclasses import dataclass
 from typing import List
 
+
 @dataclass
 class Order:
     """Class with order data structure"""

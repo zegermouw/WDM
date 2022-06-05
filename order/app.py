@@ -18,6 +18,7 @@ client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
 
 
+
 def close_db_connection():
     db.close()
 
@@ -103,3 +104,7 @@ def checkout(order_id):
 def rollback_items(items):
     for item_id in items:
         add_stock(item_id, 1)
+
+@app.get('/hey')
+def hey():
+    return 'heyy', 200
