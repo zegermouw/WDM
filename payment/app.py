@@ -1,7 +1,7 @@
 import atexit
 import os
 from enum import Enum
-from flask import Flask, request
+from flask import Flask, request, logging
 import json
 import requests
 from bson import json_util
@@ -30,7 +30,7 @@ def close_db_connection():
 
 atexit.register(close_db_connection)
 base_url = "http://host.docker.internal"
-paxos = Paxos(payment_replicas, base_url, db)
+paxos = Paxos(payment_replicas, db, logger=app.logger)
 
 # region MODEL
 
@@ -150,12 +150,14 @@ def payment_status(user_id: str, order_id: str):
 @app.post('/prepare')
 def paxos_acceptor_prepare():
     content = request.json
+    app.logger.info('prepare content %s', str(content))
     return paxos.acceptor_prepare(content['proposal_id'], content['proposal_value'])
 
 
 @app.post('/accept')
 def acceptor_accept():
     content = request.json
+    app.logger.info('content log %s', str(content))
     return paxos.acceptor_accept(content['accepted_id'], content['accepted_value'])
 
 

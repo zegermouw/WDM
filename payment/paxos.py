@@ -1,5 +1,5 @@
 import json
-
+import logging
 import requests
 from bson.objectid import ObjectId
 from pymongo import ReturnDocument
@@ -9,23 +9,25 @@ class Paxos:
     # instance variables
     min_proposal_ids: dict
     replicas: list[str]
-    base_url: str
     accepted_proposal_ids: dict
-    accepted_proposal_values = dict
+    accepted_proposal_values: dict
     _id = 'user_id'
 
     # static variables
     NOT_ACCEPTED = "not-accepted"
     ACCEPTED = "accepted"
 
-    def __init__(self, replicas: list[str], base_url: str, db, min_proposal_ids: dict = None):
+    def __init__(self, replicas: list[str], db, min_proposal_ids: dict = None, accepted_proposal_ids={}, accepted_proposal_values={}, logger=None):
         if min_proposal_ids is None:
             self.min_proposal_ids = {}
         else:
             self.min_proposal_ids = min_proposal_ids
         self.replicas = replicas
-        self.base_url = base_url
         self.db = db
+        if logger is not None:
+            self.logger = logger
+        self.accepted_proposal_ids = accepted_proposal_ids
+        self.accepted_proposal_values = accepted_proposal_values
 
     def proposer_prepare(self, proposal_value):
         payment_id: str = proposal_value[self._id]
@@ -34,8 +36,9 @@ class Paxos:
         # TODO make this loop asynchronous
         for replica_url in self.replicas:
             # TODO check if port!= self.port
-            r = requests.post(f'{replica_url}/prepare/', json=json.dumps(
-                {'proposal_id': proposal_id, 'proposal_value': proposal_value}))
+            r = requests.post(f'{replica_url}/prepare', json=
+                {'proposal_id': proposal_id, 'proposal_value': proposal_value})
+            self.log('proposal request response ' + str(r.status_code))
             if r.status_code == 200:
                 responses.append(r.json())
         return self.proposer_accept(responses)
@@ -56,8 +59,9 @@ class Paxos:
         return current_value, 400
 
     def proposer_accept(self, vote_list: list):
-        if len(vote_list) < len(self.nodes) // 2:
-            return self.NOT_ACCAPTED
+        self.log(vote_list)
+        if len(vote_list) < len(self.replicas) + 1 // 2:
+            return self.NOT_ACCEPTED
         max_id: int = -1
         value = None
         for vote in vote_list:
@@ -66,9 +70,9 @@ class Paxos:
                 value = vote['accepted_value']
 
         accept_responses = 0
-        for port in self.replicas:
-            response = requests.post(f'{self.base_url}:{port}/accept', json=json.dumps(
-                {'accepted_id': max_id, 'accepted_value': value}))
+        for replica in self.replicas:
+            response = requests.post(f'{replica}/accept', json=
+            {'accepted_id': max_id, 'accepted_value': value})
             if response.status_code == 200:
                 accept_responses += 1
 
@@ -93,7 +97,7 @@ class Paxos:
         self.min_proposal_ids[user_id] = proposal_id
 
     def get_min_proposal_id(self, user_id):
-        if user_id in self.min_proposal_ids:
+        if user_id not in self.min_proposal_ids:
             return 0
         return self.min_proposal_ids[user_id]
 
@@ -119,3 +123,9 @@ class Paxos:
             {'$set': {'credit': proposal_value['credit']}},
             return_document=ReturnDocument.AFTER
         )
+
+    def log(self, text):
+        if self.logger is not None:
+            self.logger.info("paxos log: %s", text)
+        else:
+            print('logging from paxos', text)
