@@ -46,7 +46,7 @@ services:
     image: payment:latest
     expose:
       - "5000"
-    command: gunicorn -b 0.0.0.0:5000 app:app
+    command: gunicorn --worker-class=gevent --worker-connections=1000 -b 0.0.0.0:5000 app:app # -k gevent --worker-connections 100 (i dont know why this not working) could also add --threads 12
     environment:
       - OTHER_NODE=http://payment-service1
       - PORT=27017
@@ -58,7 +58,7 @@ services:
     image: payment:latest
     expose:
       - "5000"
-    command: gunicorn -b 0.0.0.0:5000 app:app
+    command: gunicorn --worker-class=gevent --worker-connections=1000 -b 0.0.0.0:5000 app:app
 #    env_file:
 #      - env/payment_mongo.env
     environment:

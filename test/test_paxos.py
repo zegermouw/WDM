@@ -39,7 +39,11 @@ class TestPaxos(unittest.TestCase):
                 tu.async_add_credit_to_user(item['user_id'], 400, 1)
                 ]
         r = grequests.map(async_list, size=len(async_list))
-        self.assertEquals(r[1].status_code, 400)
+        self.assertEqual(r[0].status_code, 200)
+        self.assertEqual(r[1].status_code, 400)
 
 if __name__ == '__main__':
     unittest.main()
+    #testPaxos = TestPaxos()
+    #testPaxos.test_two_simultanious_updates()
+

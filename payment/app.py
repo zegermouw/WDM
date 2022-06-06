@@ -87,6 +87,7 @@ def find_user(user_id: str):
 
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: int):
+    app.logger.info("requesting add funds with amount %s, and user_id %s", amount, user_id)
     amount = int(amount)
     user = find_user_by_id(user_id)
     user['credit'] += amount
