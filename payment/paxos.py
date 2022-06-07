@@ -38,11 +38,12 @@ class Paxos:
         self.set_accepted(user_id, proposal_id, proposal_value)
         self.log("proposer_prepare proposal_id:" + str(proposal_id))
         responses = []
+        proposal = {'proposal_id': proposal_id, 'proposal_value': proposal_value}
+        responses.append({'accepted_id': proposal_id, 'accepted_value': proposal_value})
         # TODO make this loop asynchronous
         for replica_url in self.replicas:
             # TODO check if port!= self.port
-            r = requests.post(f'{replica_url}/prepare', json=
-                    {'proposal_id': proposal_id, 'proposal_value': proposal_value})
+            r = requests.post(f'{replica_url}/prepare', json=proposal)
             self.log('proposal request response ' + str(r.status_code))
             if r.status_code == 200:
                 responses.append(r.json())
@@ -52,24 +53,23 @@ class Paxos:
         user_id: str = proposal_value[self._id]
         min_proposal_id = self.get_min_proposal_id(user_id)
         self.log('acceptor_prepare min_proposal_id' + str(min_proposal_id) + ' proposal_id: ' + str(proposal_id) )
-        if proposal_id > min_proposal_id:
-            return json.dumps({'accepted_id': proposal_id, 'accepted_value': proposal_value}), 200
-        # TODO get accepted value here
         accepted_proposal_id = self.get_accepted_proposal_id(user_id)
-        self.log('acceptor_prepare accepted_proposal_id' + str(accepted_proposal_id))
         if accepted_proposal_id is not None:
             return json.dumps({
                 'accepted_id': accepted_proposal_id, 
                 'accepted_value': self.get_accepted_proposal_value(user_id)
                      }), 200
-        self.set_accepted(user_id, proposal_id, proposal_value)
+        if proposal_id > min_proposal_id:
+            self.set_accepted(user_id, proposal_id, proposal_value)
+            return json.dumps({'accepted_id': proposal_id, 'accepted_value': proposal_value}), 200
+        # TODO get accepted value here
         current_value = ""
         return current_value, 400
 
     def proposer_accept(self, vote_list: list):
         self.log('proposer value'+str(vote_list))
         if len(vote_list) < len(self.replicas) + 1 // 2:
-            return self.NOT_ACCEPTED
+            return self.NOT_ACCEPTED, {}
         max_id: int = -1
         value = None
         for vote in vote_list:
@@ -89,7 +89,7 @@ class Paxos:
             user_id: str = value[self._id]
             self.set_min_proposal_id(user_id, max_id)
             self.update_value(value)
-        return self.ACCEPTED
+        return self.ACCEPTED, value
 
     def acceptor_accept(self, accepted_id: int, proposal_value):
         user_id = proposal_value[self._id]

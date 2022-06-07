@@ -50,9 +50,10 @@ class TestPaxos(unittest.TestCase):
         credit1 = user_1['credit']
         log.debug('user_0 credit: '+str(credit0))
         log.debug('user_1 credit: '+str(credit1))
-        self.assertEqual(credit0, credit1 )
+        self.assertEqual(credit0, 900)
+        self.assertEqual(credit1, 900)
         self.assertEqual(r[0].status_code, 200)
-        self.assertEqual(r[1].status_code, 400)
+        self.assertEqual(r[1].status_code, 200)
 
 if __name__ == '__main__':
     logging.basicConfig( stream=sys.stderr )

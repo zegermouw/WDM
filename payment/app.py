@@ -8,6 +8,7 @@ from bson import json_util
 import pymongo
 from pymongo import ReturnDocument
 from bson.objectid import ObjectId
+import uuid
 
 
 from models import User
@@ -86,19 +87,22 @@ def find_user(user_id: str):
     return str(json.dumps(user, default=json_util.default)), 200
 
 
+times = 0
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: int):
-    app.logger.info("requesting add funds with amount %s, and user_id %s", amount, user_id)
+    app.logger.info("times: %s, requesting add funds with amount %s, and user_id %s", i, amount, user_id)
+    transaction_id = str(uuid.uuid4())
     amount = int(amount)
     user = find_user_by_id(user_id)
     user['credit'] += amount
-    response = paxos.proposer_prepare(user)
-    if response == Paxos.ACCEPTED:
-        return 'ACCEPTED', 200
+    user['transaction_id'] = transaction_id
+    response, accepted_user = paxos.proposer_prepare(user)
+    if response == Paxos.NOT_ACCEPTED:
+        return add_credit(user_id, amount) 
+    if accepted_user['transaction_id']!=user['transaction_id']:     
+        return add_credit(user_id, amount)
     # go trough another round of paxos when not accepted, retry... once
-    return add_credit(user_id, amount)
-    #return json.dumps(user), 400
-
+    return 'ACCEPTED', 200
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
 def remove_credit(user_id: str, order_id: str, amount: int):
