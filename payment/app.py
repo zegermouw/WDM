@@ -15,7 +15,7 @@ from models import User
 
 app = Flask("payment-service")
 
-myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
+myclient = pymongo.MongoClient(os.environ['PAYMENT_GATEWAY'], int(os.environ['PAYMENT_PORT']))
 db = myclient["local"]
 
 

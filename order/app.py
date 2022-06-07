@@ -1,21 +1,23 @@
 import os
 import atexit
+import sys
 from orderutils import subtract_stock, find_item, payment_pay, add_stock
 
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 from flask import Flask
 from bson import json_util
 from bson.objectid import ObjectId
 
 from order import Order
 
-gateway_url = os.environ['GATEWAY_URL']
+# gateway_url = os.environ['GATEWAY_URL']
 
 app = Flask("order-service")
 
-client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
+client = MongoClient(os.environ['ORDER_GATEWAY'])
 db = client['local']
-
+print("started", file=sys.stderr)
 
 def close_db_connection():
     db.close()
@@ -64,7 +66,7 @@ def remove_item(order_id, item_id):
 
 @app.get('/find/<order_id>')
 def find_order(order_id):
-    order = db.orders.find_one({"_id": ObjectId(order_id)})
+    order = db.orders.find_one({"_id": ObjectId(str(order_id))})
     order = Order.loads(order)
     return order.dumps(), 200
 
