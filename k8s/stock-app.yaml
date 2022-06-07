@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: stock
-          image: stock:latest
+          image: zegermouw/stock:latest
           resources:
             limits:
               memory: "1Gi"

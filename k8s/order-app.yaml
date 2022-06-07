@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: order
-          image: order:latest
+          image: zegermouw/order:latest
           resources:
             limits:
               memory: "1Gi"
@@ -40,15 +40,12 @@ spec:
           ports:
             - containerPort: 5000
           env:
-            - name: USER_SERVICE_URL
-              value: "user-service"
+            - name: PAYMENT_SERVICE_URL
+              value: "payment-service"
             - name: STOCK_SERVICE_URL
               value: "stock-service"
-            - name: REDIS_HOST
-              value: redis-master
-            - name: REDIS_PORT
-              value: '6379'
-            - name: REDIS_PASSWORD
-              value: "redis"
-            - name: REDIS_DB
-              value: "0"
+            - name: ORDER_GATEWAY
+              value: "mongodb://zegermouw-mongodb:27018/db"
+            - name: ORDER_PORT
+              value: "27018"
+
