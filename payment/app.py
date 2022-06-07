@@ -23,6 +23,7 @@ for i in range(len(payment_replicas)):
     s = payment_replicas[i]
     payment_replicas[i] = s + ':' + port
 
+replication_number = int(os.environ['REPLICATION_NUMBER'])
 
 def close_db_connection():
     myclient.close()
@@ -30,7 +31,7 @@ def close_db_connection():
 
 atexit.register(close_db_connection)
 base_url = "http://host.docker.internal"
-paxos = Paxos(payment_replicas, db, logger=app.logger)
+paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
 
 # region MODEL
 
@@ -92,15 +93,11 @@ def add_credit(user_id: str, amount: int):
     user = find_user_by_id(user_id)
     user['credit'] += amount
     response = paxos.proposer_prepare(user)
-    # user = db.users.find_one_and_update(
-    #     {'_id': ObjectId(user_id)},
-    #     {'$inc': {'credit': amount}},
-    #     return_document=ReturnDocument.AFTER
-    # )
-    # TODO return the most recent value.
     if response == Paxos.ACCEPTED:
         return 'ACCEPTED', 200
-    return json.dumps(user), 400
+    # go trough another round of paxos when not accepted, retry... once
+    return add_credit(user_id, amount)
+    #return json.dumps(user), 400
 
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')

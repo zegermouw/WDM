@@ -51,6 +51,7 @@ services:
       - OTHER_NODE=http://payment-service1
       - PORT=27017
       - GATEWAY_URL=mongodb://payment-db0:27017/db
+      - REPLICATION_NUMBER=0
       - FLASK_ENV=development
 
   payment-service1:
@@ -65,6 +66,7 @@ services:
       - OTHER_NODE=http://payment-service0
       - PORT=27019
       - GATEWAY_URL=mongodb://payment-db1:27019/db
+      - REPLICATION_NUMBER=1
       - FLASK_ENV=development
 
 

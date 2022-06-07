@@ -1,6 +1,9 @@
 import unittest
 import utils as tu
 import grequests
+import logging
+import sys
+
 
 class TestPaxos(unittest.TestCase):
 
@@ -29,6 +32,8 @@ class TestPaxos(unittest.TestCase):
         self.assertEqual(user_0['credit'], amount)
 
     def test_two_simultanious_updates(self):
+        # load logger
+        log = logging.getLogger('TestPaxos.test_two_simultanious_updates')
         # Create user.
         item: dict = tu.create_user_service0()
         self.assertTrue('user_id' in item)
@@ -39,10 +44,19 @@ class TestPaxos(unittest.TestCase):
                 tu.async_add_credit_to_user(item['user_id'], 400, 1)
                 ]
         r = grequests.map(async_list, size=len(async_list))
+        user_0 = tu.find_user_service0(item['user_id'])
+        user_1 = tu.find_user_service1(item['user_id'])
+        credit0 = user_0['credit']
+        credit1 = user_1['credit']
+        log.debug('user_0 credit: '+str(credit0))
+        log.debug('user_1 credit: '+str(credit1))
+        self.assertEqual(credit0, credit1 )
         self.assertEqual(r[0].status_code, 200)
         self.assertEqual(r[1].status_code, 400)
 
 if __name__ == '__main__':
+    logging.basicConfig( stream=sys.stderr )
+    logging.getLogger( 'TestPaxos.test_two_simultanious_updates' ).setLevel( logging.DEBUG )
     unittest.main()
     #testPaxos = TestPaxos()
     #testPaxos.test_two_simultanious_updates()

@@ -11,13 +11,14 @@ class Paxos:
     replicas: list[str]
     accepted_proposal_ids: dict
     accepted_proposal_values: dict
+    replication_number: int
     _id = 'user_id'
 
     # static variables
     NOT_ACCEPTED = "not-accepted"
     ACCEPTED = "accepted"
 
-    def __init__(self, replicas: list[str], db, min_proposal_ids: dict = None, accepted_proposal_ids={}, accepted_proposal_values={}, logger=None):
+    def __init__(self, replicas: list[str], db, replication_number: int, min_proposal_ids: dict = None, accepted_proposal_ids={}, accepted_proposal_values={}, logger=None):
         if min_proposal_ids is None:
             self.min_proposal_ids = {}
         else:
@@ -28,16 +29,20 @@ class Paxos:
             self.logger = logger
         self.accepted_proposal_ids = accepted_proposal_ids
         self.accepted_proposal_values = accepted_proposal_values
+        self.replication_number = replication_number
 
     def proposer_prepare(self, proposal_value):
         payment_id: str = proposal_value[self._id]
-        proposal_id = self.get_min_proposal_id(payment_id) + 1
+        user_id: str = proposal_value[self._id]
+        proposal_id = self.generate_new_poposal_id(user_id, payment_id)
+        self.set_accepted(user_id, proposal_id, proposal_value)
+        self.log("proposer_prepare proposal_id:" + str(proposal_id))
         responses = []
         # TODO make this loop asynchronous
         for replica_url in self.replicas:
             # TODO check if port!= self.port
             r = requests.post(f'{replica_url}/prepare', json=
-                {'proposal_id': proposal_id, 'proposal_value': proposal_value})
+                    {'proposal_id': proposal_id, 'proposal_value': proposal_value})
             self.log('proposal request response ' + str(r.status_code))
             if r.status_code == 200:
                 responses.append(r.json())
@@ -46,20 +51,23 @@ class Paxos:
     def acceptor_prepare(self, proposal_id: int, proposal_value):
         user_id: str = proposal_value[self._id]
         min_proposal_id = self.get_min_proposal_id(user_id)
+        self.log('acceptor_prepare min_proposal_id' + str(min_proposal_id) + ' proposal_id: ' + str(proposal_id) )
         if proposal_id > min_proposal_id:
-            accepted_proposal_id = self.get_accepted_proposal_id(user_id)
-            if accepted_proposal_id is not None:
-                return json.dumps(
-                    {'accepted_id': accepted_proposal_id, 'accepted_value': self.get_accepted_proposal_value(user_id)
-                     }), 200
-            self.set_accepted(user_id, proposal_id, proposal_value)
             return json.dumps({'accepted_id': proposal_id, 'accepted_value': proposal_value}), 200
         # TODO get accepted value here
+        accepted_proposal_id = self.get_accepted_proposal_id(user_id)
+        self.log('acceptor_prepare accepted_proposal_id' + str(accepted_proposal_id))
+        if accepted_proposal_id is not None:
+            return json.dumps({
+                'accepted_id': accepted_proposal_id, 
+                'accepted_value': self.get_accepted_proposal_value(user_id)
+                     }), 200
+        self.set_accepted(user_id, proposal_id, proposal_value)
         current_value = ""
         return current_value, 400
 
     def proposer_accept(self, vote_list: list):
-        self.log(vote_list)
+        self.log('proposer value'+str(vote_list))
         if len(vote_list) < len(self.replicas) + 1 // 2:
             return self.NOT_ACCEPTED
         max_id: int = -1
@@ -91,6 +99,12 @@ class Paxos:
         self.update_value(proposal_value)
         self.set_min_proposal_id(user_id, accepted_id)
         return 'accepted', 200
+
+    def generate_new_poposal_id(self, user_id, payment_id):
+        proposal_id = int(self.get_min_proposal_id(payment_id)) + 1 + self.replication_number/10
+        #self.set_min_proposal_id(user_id, proposal_id) #should this be here?
+        return proposal_id
+
 
     def set_min_proposal_id(self, user_id: str, proposal_id: int):
         # TODO add persistence for min_proposal_id
@@ -126,6 +140,6 @@ class Paxos:
 
     def log(self, text):
         if self.logger is not None:
-            self.logger.info("paxos log: %s", text)
+            self.logger.info("%s", text)
         else:
             print('logging from paxos', text)
