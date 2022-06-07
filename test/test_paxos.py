@@ -55,6 +55,29 @@ class TestPaxos(unittest.TestCase):
         self.assertEqual(r[0].status_code, 200)
         self.assertEqual(r[1].status_code, 200)
 
+       # Try removing users mony async 
+        user_id = item['user_id']
+        async_list = [
+               tu.async_remove_credit_from_user(user_id, 'order1', 500, 0),
+               tu.async_remove_credit_from_user(user_id, 'order1', 900, 1)  
+                ]
+        r = grequests.map(async_list, size=len(async_list))
+        log.debug('request 0 status'+str(r[0].status_code))
+        log.debug('request 1 status'+str(r[1].status_code))
+       
+        # get users for debugging
+        user_0 = tu.find_user_service0(item['user_id'])
+        user_1 = tu.find_user_service1(item['user_id'])
+        credit0 = user_0['credit']
+        credit1 = user_1['credit']
+        log.debug('user_0 credit: '+str(credit0))
+        log.debug('user_1 credit: '+str(credit1))
+        
+        self.assertTrue(r[0].status_code==400 or r[1].status_code==400)
+        self.assertTrue(r[1].status_code==200 or r[1].status_code==100)
+
+
+
 if __name__ == '__main__':
     logging.basicConfig( stream=sys.stderr )
     logging.getLogger( 'TestPaxos.test_two_simultanious_updates' ).setLevel( logging.DEBUG )

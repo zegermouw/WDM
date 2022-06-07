@@ -90,18 +90,19 @@ def find_user(user_id: str):
 times = 0
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: int):
+    # TODO restrict number of retries for Paxos.NOT_ACCEPTED
     app.logger.info("times: %s, requesting add funds with amount %s, and user_id %s", i, amount, user_id)
-    transaction_id = str(uuid.uuid4())
     amount = int(amount)
     user = find_user_by_id(user_id)
     user['credit'] += amount
+    transaction_id = str(uuid.uuid4())
     user['transaction_id'] = transaction_id
     response, accepted_user = paxos.proposer_prepare(user)
+    # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
         return add_credit(user_id, amount) 
     if accepted_user['transaction_id']!=user['transaction_id']:     
         return add_credit(user_id, amount)
-    # go trough another round of paxos when not accepted, retry... once
     return 'ACCEPTED', 200
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
@@ -111,12 +112,15 @@ def remove_credit(user_id: str, order_id: str, amount: int):
     if user['credit'] < amount:
         return 'Insufficient credit', 400
 
-    # TODO check if this update returns ok status
-    db.users.find_one_and_update(
-        {'_id': ObjectId(user_id)},
-        {'$inc': {'credit': -amount}},
-    )
+    user['credit'] -= amount
+    user['transaction_id'] = str(uuid.uuid4())
+    response, accepted_user = paxos.proposer_prepare(user)
 
+    # go trough another round of paxos when not accepted, retry... once
+    if response == Paxos.NOT_ACCEPTED:
+        return remove_credit(user_id, order_id, amount) 
+    if accepted_user['transaction_id']!=user['transaction_id']:     
+        return remove_credit(user_id, order_id, amount)
     payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))

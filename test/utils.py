@@ -62,6 +62,10 @@ def test_prepare_endpoint(proposal_id: int, proposal_value: dict):
 def async_add_credit_to_user(user_id: str, amount: float, service: int) -> int:
     return grequests.post(f"{PAYMENT_URL}/payment{str(service)}/add_funds/{user_id}/{amount}")
 
+def async_remove_credit_from_user(user_id: str, order_id: str, amount: float, service: int) -> int:
+    return grequests.post(f"{PAYMENT_URL}/payment{str(service)}/pay/{user_id}/{order_id}/{amount}")
+
+
 ########################################################################################################################
 #   ORDER MICROSERVICE FUNCTIONS
 ########################################################################################################################
