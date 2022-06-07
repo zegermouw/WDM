@@ -1,9 +1,10 @@
 import os
 import atexit
-from flask import Flask
+import sys
+
+from flask import Flask, request
 import redis
 from stock import Stock
-
 
 app = Flask("stock-service")
 
@@ -54,10 +55,9 @@ def add_stock(item_id: str, amount: int):
     s = Stock.loads(d)
     s.stock += int(amount)
     db.set(s.item_id, s.dumps())
-    return s.dumps()
+    return s.dumps(), 200
 
 
-@app.post('/subtract/<item_id>/<amount>')
 def remove_stock(item_id: str, amount: int):
     """
     Remove stock from item with given id.
@@ -69,7 +69,44 @@ def remove_stock(item_id: str, amount: int):
     d = db.get(item_id)
     s = Stock.loads(d)
     if s.stock - amount < 0:
-        return "Not enough stock", 400
+        return False
     s.stock -= amount
     db.set(s.item_id, s.dumps())
-    return s.dumps()
+    return True
+
+
+def check_stock(item_id, amount) -> bool:
+    d = db.get(item_id)
+    s = Stock.loads(d)
+    return s >= amount
+
+
+@app.post('/prepare-stock')
+def prepare_stock():
+    items = request.json
+    for item in items:
+        if not check_stock(item, items[item]):
+            return f'Not enough stock for item: {item}', 400
+
+    return 'Successfully prepared stock', 200
+
+
+@app.post('/commit-stock')
+def commit_stock():
+    items = request.json
+    for item in items:
+        if not remove_stock(item, items[item]):
+            return 'An item did not have enough stock, commit aborted', 400
+
+    return 'Successfully committed stock', 200
+
+
+@app.post('/rollback-stock')
+def rollback_stock():
+    items = request.json
+    for item in items:
+        status = add_stock(item, items[item])
+        if status.statuscode != 200:
+            return 'Something went wrong while rolling back stock', 400
+
+    return 'Rolled back Stock', 200

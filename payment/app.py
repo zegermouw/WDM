@@ -76,11 +76,11 @@ def add_credit(user_id: str, amount: int):
 
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
-def remove_credit(user_id: str, order_id: str, amount: int):
-    amount = int(amount)
-    user = find_user_by_id(user_id)
-    if user['credit'] < amount:
-        return 'Insufficient credit', 400
+def remove_credit(user_id: str, order_id: str, amount: float):
+    # amount = int(amount)
+    # user = find_user_by_id(user_id)
+    # if user['credit'] < amount:
+    #     return 'Insufficient credit', 400
     # block user account from removing/adding credit
     # send ready to commit to coordinator
 
@@ -90,16 +90,16 @@ def remove_credit(user_id: str, order_id: str, amount: int):
         {'_id': ObjectId(user_id)},
         {'$inc': {'credit': -amount}},
     )
-    payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
+    payment = {'user_id': user_id, 'order_id': order_id,  'status': OrderStatus.PAYED}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))
-    return json.dumps(payment), 200
+    return True
 
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
     """
-    Cancels the payment (should this method alsoa dd the amount of the order
+    Cancels the payment (should this method also add the amount of the order
     back to the users account?)
     :param user_id:
     :param order_id:
@@ -123,20 +123,21 @@ def payment_status(user_id: str, order_id: str):
 
 
 @app.post('/prepare-pay/<user_id>/<order_id>/<amount>')
-def prepare_pay(user_id: str, order_id: str, amount: float):
-    # here we should freeze the account of user_id
-    return '', 200
+def prepare_pay(user_id: str, amount: float):
+    amount = int(amount)
+    user = find_user_by_id(user_id)
+    return 'Insufficient credit', 400 if user['credit'] < amount else 'Prepare of payment successful', 200
 
 
 @app.post('/rollback-pay/<user_id>/<order_id>/<amount>')
 def rollback_pay(user_id: str, order_id: str, amount: float):
-    # here we should roll back any changes and remove the locks
-    return '', 200
+    status = add_credit(user_id, order_id, amount)
+    return 'Rolled back successfully', 200 if status else 'Could not rollback', 400
 
 
 @app.post('/commit-pay/<user_id>/<order_id>/<amount>')
 def commit_pay(user_id: str, order_id: str, amount: float):
-    # here we can debit the account and remove the lock
-    return '', 200
+    status = remove_credit(user_id, order_id, amount)
+    return 'Committed successfully', 200 if status else 'Could not commit', 400
 
 # endregion
