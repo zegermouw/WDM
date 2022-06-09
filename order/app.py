@@ -2,12 +2,15 @@ import os
 import atexit
 import sys
 
+import requests
+
 from orderutils import subtract_stock, find_item, payment_pay, add_stock
 
 from pymongo import MongoClient
 from flask import Flask
 from bson import json_util
 from bson.objectid import ObjectId
+import kubernetes as k8s
 
 from order import Order
 
@@ -17,14 +20,34 @@ app = Flask("order-service")
 
 client = MongoClient(os.environ['ORDER_GATEWAY'], int(os.environ['ORDER_PORT']))
 db = client['local']
+k8s.config.load_incluster_config()
+v1 = k8s.client.CoreV1Api()
 
 
 def close_db_connection():
     db.close()
 
+def get_pods():
+    pod_list = v1.list_pod_for_all_namespaces(watch=False)
+    dict = []
+    for pod in pod_list.items:
+        if("order-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
+            dict.append({'name': pod.metadata.name, 'ip': pod.status.pod_ip})
+            requests.get(pod.stat)
+            print(dict, file=sys.stderr)
 
 atexit.register(close_db_connection)
 
+
+# TODO: handle error handling for when mongodb fails.
+# TODO: Better handle mongodb response format.
+
+@app.get('/')
+def test_get():
+    print("---------------------------------", file=sys.stderr)
+    get_pods()
+    print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<", file=sys.stderr)
+    return "joee", 200
 
 @app.post('/create/<user_id>')
 def create_order(user_id):

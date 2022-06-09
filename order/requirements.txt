@@ -4,3 +4,4 @@ gunicorn==20.1.0
 pymongo==4.1.1
 json_util
 requests==2.27.1
+kubernetes
