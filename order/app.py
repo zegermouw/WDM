@@ -1,13 +1,15 @@
 import os
 import atexit
 import sys
-
+import socket
 import requests
 
 from orderutils import subtract_stock, find_item, payment_pay, add_stock
 
 from pymongo import MongoClient
 from flask import Flask
+from flask import request as flask_request
+
 from bson import json_util
 from bson.objectid import ObjectId
 import kubernetes as k8s
@@ -22,7 +24,10 @@ client = MongoClient(os.environ['ORDER_GATEWAY'], int(os.environ['ORDER_PORT']))
 db = client['local']
 k8s.config.load_incluster_config()
 v1 = k8s.client.CoreV1Api()
-
+hostname=socket.gethostname()
+IPAddr=socket.gethostbyname(hostname)
+print(hostname, file=sys.stderr)
+print("running on: " + IPAddr, file=sys.stderr)
 
 def close_db_connection():
     db.close()
@@ -33,14 +38,21 @@ def get_pods():
     for pod in pod_list.items:
         if("order-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
             dict.append({'name': pod.metadata.name, 'ip': pod.status.pod_ip})
-            requests.get(pod.stat)
-            print(dict, file=sys.stderr)
+    print(dict, file=sys.stderr)
+    for dic in dict:
+        if(dic["ip"] != IPAddr):
+            requests.get("http://" + dic["ip"] + ":5000/test")
 
 atexit.register(close_db_connection)
 
 
 # TODO: handle error handling for when mongodb fails.
 # TODO: Better handle mongodb response format.
+
+@app.get('/test')
+def test_get2():
+    print("got message from: " + flask_request.remote_addr, file=sys.stderr)
+    return "test", 200
 
 @app.get('/')
 def test_get():
