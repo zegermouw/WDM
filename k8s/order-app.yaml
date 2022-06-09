@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: order-service
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     component: order
   ports:
@@ -45,7 +45,15 @@ spec:
             - name: STOCK_SERVICE_URL
               value: "stock-service"
             - name: ORDER_GATEWAY
-              value: "mongodb://zegermouw-mongodb:27018/db"
+              value: "mongodb://localhost:27018/db"
             - name: ORDER_PORT
               value: "27018"
+        - name: order-db
+          args:
+            - mongod
+            - --port
+            - "27018"
+          image: mongo
+          ports:
+            - containerPort: 27018
 

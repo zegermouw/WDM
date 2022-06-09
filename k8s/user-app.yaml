@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: payment-service
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     component: payment
   ports:
