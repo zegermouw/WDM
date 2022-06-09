@@ -4,7 +4,6 @@ import sys
 from orderutils import subtract_stock, find_item, payment_pay, add_stock
 
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
 from flask import Flask
 from bson import json_util
 from bson.objectid import ObjectId
@@ -15,9 +14,9 @@ from order import Order
 
 app = Flask("order-service")
 
-client = MongoClient(os.environ['ORDER_GATEWAY'])
+client = MongoClient(os.environ['ORDER_GATEWAY'], int(os.environ['ORDER_PORT']))
 db = client['local']
-print("started", file=sys.stderr)
+
 
 def close_db_connection():
     db.close()
@@ -51,7 +50,6 @@ def add_item(order_id, item_id):
     db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
     return order.dumps(), 200
 
-
 @app.delete('/removeItem/<order_id>/<item_id>')
 def remove_item(order_id, item_id):
     order = db.orders.find_one({"_id": ObjectId(order_id)})
@@ -66,6 +64,7 @@ def remove_item(order_id, item_id):
 
 @app.get('/find/<order_id>')
 def find_order(order_id):
+    print("I did this!!", file=sys.stderr)
     order = db.orders.find_one({"_id": ObjectId(str(order_id))})
     order = Order.loads(order)
     return order.dumps(), 200
