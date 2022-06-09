@@ -1,7 +1,7 @@
 import json
-import uuid
 from dataclasses import dataclass
 from typing import List
+
 
 @dataclass
 class Order:

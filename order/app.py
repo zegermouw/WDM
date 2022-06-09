@@ -1,10 +1,11 @@
 import os
 import atexit
-from orderutils import subtract_stock, find_item, payment_pay, add_stock
+from abc import ABC
+
+from orderutils import subtract_stock, payment_pay, add_stock
 
 from pymongo import MongoClient
 from flask import Flask
-from bson import json_util
 from bson.objectid import ObjectId
 
 from order import Order
@@ -15,6 +16,7 @@ app = Flask("order-service")
 
 client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
+
 
 
 def close_db_connection():
@@ -102,3 +104,7 @@ def checkout(order_id):
 def rollback_items(items):
     for item_id in items:
         add_stock(item_id, 1)
+
+@app.get('/hey')
+def hey():
+    return 'heyy', 200
