@@ -29,6 +29,9 @@ IPAddr=socket.gethostbyname(hostname)
 print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
 
+vector_clock = 0
+vector_list = []
+
 def close_db_connection():
     db.close()
 
@@ -36,7 +39,7 @@ def get_pods():
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
     dict = []
     for pod in pod_list.items:
-        if("order-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
+        if("order-set" in pod.metadata.name and pod.status.phase == 'Running'):
             dict.append({'name': pod.metadata.name, 'ip': pod.status.pod_ip})
     print(dict, file=sys.stderr)
     for dic in dict:
