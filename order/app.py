@@ -6,6 +6,8 @@ import requests
 
 from orderutils import subtract_stock, find_item, payment_pay, add_stock
 
+from orderutils import subtract_stock, payment_pay, add_stock
+
 from pymongo import MongoClient
 from flask import Flask
 from flask import request as flask_request
@@ -28,6 +30,7 @@ hostname=socket.gethostname()
 IPAddr=socket.gethostbyname(hostname)
 print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
+
 
 def close_db_connection():
     db.close()
@@ -136,3 +139,7 @@ def checkout(order_id):
 def rollback_items(items):
     for item_id in items:
         add_stock(item_id, 1)
+
+@app.get('/hey')
+def hey():
+    return 'heyy', 200
