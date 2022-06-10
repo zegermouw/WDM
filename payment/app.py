@@ -17,7 +17,7 @@ from paxos import Paxos
 
 app = Flask("payment-service")
 
-myclient = pymongo.MongoClient(os.environ['PAYMENT_GATEWAY'], int(os.environ['PAYMENT_PORT']))
+myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
 payment_replicas: list[str] = [os.environ['OTHER_NODE']]
 port = '5000'

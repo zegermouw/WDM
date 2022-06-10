@@ -20,7 +20,7 @@ from order import Order
 
 app = Flask("order-service")
 
-client = MongoClient(os.environ['ORDER_GATEWAY'], int(os.environ['ORDER_PORT']))
+client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
 k8s.config.load_incluster_config()
 v1 = k8s.client.CoreV1Api()

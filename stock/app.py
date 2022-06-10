@@ -3,22 +3,26 @@ import atexit
 import sys
 
 from flask import Flask, request, Response, jsonify
-import redis
+from bson import ObjectId
+from pymongo import MongoClient, ReturnDocument
 from stock import Stock
 
 app = Flask("stock-service")
 
-db: redis.Redis = redis.Redis(host=os.environ['REDIS_HOST'],
-                              port=int(os.environ['REDIS_PORT']),
-                              password=os.environ['REDIS_PASSWORD'],
-                              db=int(os.environ['REDIS_DB']))
 
+client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
+db = client['local']
 
 def close_db_connection():
     db.close()
 
 
 atexit.register(close_db_connection)
+
+
+def get_stock_by_id(item_id: str):
+    stock = db.stock.find_one({"_id": ObjectId(str(item_id))})
+    return Stock.loads(stock)
 
 
 @app.post('/item/create/<price>')
@@ -28,10 +32,10 @@ def create_item(price: int):
     :param price:
     :return: Stock
     """
-    s = Stock.new(int(float(price)))
-    db.set(s.item_id, s.dumps())
-
-    return jsonify(s)
+    stock = Stock(price=int(price))
+    db.stock.insert_one(stock.__dict__)
+    stock.item_id = str(stock.__dict__.pop('_id'))
+    return stock.dumps()
 
 
 @app.get('/find/<item_id>')
@@ -41,9 +45,8 @@ def find_item(item_id: str):
     :param item_id:
     :return: Stock
     """
-    d = db.get(item_id)
-    s = Stock.loads(d)
-    return jsonify(s)
+    stock = get_stock_by_id(item_id)
+    return stock.dumps(), 200
 
 
 @app.post('/add/<item_id>/<amount>')
@@ -54,11 +57,14 @@ def add_stock(item_id: str, amount: int):
     :param amount:
     :return: Stock
     """
-    d = db.get(item_id)
-    s = Stock.loads(d)
-    s.stock += int(float(amount))
-    db.set(s.item_id, s.dumps())
-    return jsonify(s), 200
+    amount = int(amount)
+    stock = db.stock.find_one_and_update(
+        {'_id': ObjectId(str(item_id))},
+        {'$inc': {'stock': amount}},
+        return_document=ReturnDocument.AFTER
+    )
+    stock = Stock.loads(stock)
+    return stock.dumps(), 200
 
 
 def remove_stock(item_id: str, amount: int):
@@ -68,48 +74,14 @@ def remove_stock(item_id: str, amount: int):
     :param amount: The amount to remove from the stock.
     :return: Stock item.
     """
-    amount = int(float(amount))
-    d = db.get(item_id)
-    s = Stock.loads(d)
-    if s.stock - amount < 0:
-        return False
-    s.stock -= amount
-    db.set(s.item_id, s.dumps())
-    return True
-
-
-def check_stock(item_id, amount) -> bool:
-    d = db.get(item_id)
-    s = Stock.loads(d)
-    return s.stock >= amount
-
-
-@app.post('/prepare_stock')
-def prepare_stock():
-    items = request.json
-    for item in items:
-        if not check_stock(item, items[item]):
-            return f'Not enough stock for item: {item}', 500
-
-    return 'Successfully prepared stock', 200
-
-
-@app.post('/commit_stock')
-def commit_stock():
-    items = request.json
-    for item in items:
-        if not remove_stock(item, items[item]):
-            return 'An item did not have enough stock, commit aborted', 500
-
-    return 'Successfully committed stock', 200
-
-
-@app.post('/rollback_stock')
-def rollback_stock():
-    items = request.json
-    for item in items:
-        status = add_stock(item, items[item])
-        if status[1] != 200:
-            return 'Something went wrong while rolling back stock', 500
-
-    return 'Rolled back Stock', 200
+    amount = int(amount)
+    stock = get_stock_by_id(item_id)
+    if stock.stock < amount:
+        return "Not enough stock", 400
+    stock = db.stock.find_one_and_update(
+        {'_id': ObjectId(str(item_id))},
+        {'$inc': {'stock': -amount}},
+        return_document=ReturnDocument.AFTER
+    )
+    stock = Stock.loads(stock)
+    return stock.dumps(), 200 

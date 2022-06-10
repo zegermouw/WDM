@@ -6,7 +6,7 @@ services:
     volumes:
       - ./gateway_nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "80:80"
+      - "8000:80"
 
   order-db:
     container_name: order-db
@@ -26,22 +26,24 @@ services:
     env_file:
       - env/order_mongo.env
 
-#  order-db:
-#    image: redis:latesta
-#    command: redis-server --requirepass redis --maxmemory 512mb
+
+
 
   stock-service:
     build: ./stock
     image: stock:latest
     command: gunicorn -b 0.0.0.0:5000 app:app
     env_file:
-      - env/stock_redis.env
+      - env/stock_mongo.env
 
   stock-db:
-    image: redis:latest
-    logging:
-      driver: "none"
-    command: redis-server --requirepass redis --maxmemory 512mb
+    container_name: stock-db
+    image: mongo
+    command: mongod --port 27020
+    volumes:
+      - ./data:/data/db_stock
+    ports:
+      - "27020:27020"
 
   payment-service0:
     build: ./payment
