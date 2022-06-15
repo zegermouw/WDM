@@ -74,7 +74,7 @@ def create_user():
     user.set_id()
     for replica in payment_replicas:
         requests.put(replica + '/create_user', json=user.__dict__)
-    return jsonify({'user_id': str(user_id)}), 200
+    return user.dumps(), 200
 
 
 @app.put('/create_user')

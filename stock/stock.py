@@ -13,7 +13,7 @@ class Stock:
         return json.dumps(self.__dict__)
 
     @staticmethod
-    def loads(input_json: str):
+    def loads(input_json: dict):
         if '_id' in input_json:
             input_json['item_id'] = str(input_json.pop('_id'))
         return Stock(**input_json)
