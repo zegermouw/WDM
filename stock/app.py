@@ -78,10 +78,10 @@ def remove_stock(item_id: str, amount: int):
 def check_stock(item_id, amount) -> bool:
     d = db.get(item_id)
     s = Stock.loads(d)
-    return s >= amount
+    return s.stock >= amount
 
 
-@app.post('/prepare-stock')
+@app.post('/prepare_stock')
 def prepare_stock():
     items = request.json
     for item in items:
@@ -91,7 +91,7 @@ def prepare_stock():
     return 'Successfully prepared stock', 200
 
 
-@app.post('/commit-stock')
+@app.post('/commit_stock')
 def commit_stock():
     items = request.json
     for item in items:
@@ -101,12 +101,13 @@ def commit_stock():
     return 'Successfully committed stock', 200
 
 
-@app.post('/rollback-stock')
+@app.post('/rollback_stock')
 def rollback_stock():
     items = request.json
     for item in items:
         status = add_stock(item, items[item])
-        if status.statuscode != 200:
+        print(status, file=sys.stderr)
+        if status[1] != 200:
             return 'Something went wrong while rolling back stock', 400
 
     return 'Rolled back Stock', 200

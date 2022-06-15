@@ -1,5 +1,7 @@
 import os
 import atexit
+import sys
+
 from orderutils import find_item, pay_order
 
 from pymongo import MongoClient
@@ -94,11 +96,6 @@ def find_order(order_id):
 
 @app.post('/checkout/<order_id>')
 def checkout(order_id):
-    """
-        Reserve stock from stock service and request payment from payment service
-            - if stock service has not enough stock for one item, rollback
-            - if pyment service fails payment: rollback items.
-    """
     order = db.orders.find_one({"_id": ObjectId(order_id)})
     order = Order.loads(order)
 
@@ -119,9 +116,6 @@ def checkout(order_id):
         else:
             items[item] = 1
 
-    return pay_order(order.user_id, order_id, items, total_checkout_amount)
+    status = pay_order(order.user_id, order_id, items, total_checkout_amount)
 
-
-# def rollback_items(items):
-#     for item_id in items:
-#         add_stock(item_id, 1)
+    return status.content, status.status_code

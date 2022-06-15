@@ -1,30 +1,32 @@
-import requests, json
+import requests
+import json
+from requests import Response
 
 ORDER_URL = STOCK_URL = PAYMENT_URL = "http://host.docker.internal:8000"
 
 
-def prepare_pay(user_id: str, order_id: str, price: float) -> int:
-    return requests.post(f"{PAYMENT_URL}/payment/prepare-pay/{user_id}/{order_id}/{price}").status_code
+def prepare_pay(user_id: str, price: float) -> Response:
+    return requests.post(f"{PAYMENT_URL}/payment/prepare_pay/{user_id}/{price}")
 
 
-def rollback_pay(user_id: str, order_id: str, price: float) -> int:
-    return requests.post(f"{PAYMENT_URL}/payment/rollback-pay/{user_id}/{order_id}/{price}").status_code
+def rollback_pay(user_id: str, price: float) -> int:
+    return requests.post(f"{PAYMENT_URL}/payment/rollback_pay/{user_id}/{price}").status_code
 
 
 def commit_pay(user_id: str, order_id: str, price: float) -> int:
-    return requests.post(f"{PAYMENT_URL}/payment/commit-pay/{user_id}/{order_id}/{price}").status_code
+    return requests.post(f"{PAYMENT_URL}/payment/commit_pay/{user_id}/{order_id}/{price}").status_code
 
 
-def prepare_stock(item_ids: [str]) -> int:
-    return requests.post(f"{PAYMENT_URL}/stock/prepare-stock", json=item_ids).status_code
+def prepare_stock(item_ids: [str]) -> Response:
+    return requests.post(f"{PAYMENT_URL}/stock/prepare_stock", json=item_ids)
 
 
 def commit_stock(item_ids: [str]) -> int:
-    return requests.post(f"{PAYMENT_URL}/stock/commit-stock", json=item_ids).status_code
+    return requests.post(f"{PAYMENT_URL}/stock/commit_stock", json=item_ids).status_code
 
 
 def rollback_stock(item_ids: [str]) -> int:
-    return requests.post(f"{PAYMENT_URL}/stock/rollback-stock", json=item_ids).status_code
+    return requests.post(f"{PAYMENT_URL}/stock/rollback_stock", json=item_ids).status_code
 
 
 def read_locking_doc():
@@ -34,11 +36,12 @@ def read_locking_doc():
     return user_dict
 
 
-def lock(user_id: str, item_ids: [str]):
+def lock(user_id: str, item_ids: [str], lock_items: bool):
     file = open("locking_doc.json", "r")
     file_data = json.load(file)
     file_data["users"].append(user_id)
-    file_data["items"].extend(item_ids)
+    if lock_items:
+        file_data["items"].extend(item_ids)
     file.close()
     file = open("locking_doc.json", "w")
     json.dump(file_data, file, indent=4)

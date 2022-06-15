@@ -1,5 +1,6 @@
 import atexit
 import os
+import sys
 from enum import Enum
 
 from flask import Flask
@@ -64,7 +65,7 @@ def find_user(user_id: str):
 
 
 @app.post('/add_funds/<user_id>/<amount>')
-def add_credit(user_id: str, amount: int):
+def add_credit(user_id: str, amount: float):
     amount = int(amount)
     user = db.users.find_one_and_update(
         {'_id': ObjectId(user_id)},
@@ -77,20 +78,13 @@ def add_credit(user_id: str, amount: int):
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
 def remove_credit(user_id: str, order_id: str, amount: float):
-    # amount = int(amount)
-    # user = find_user_by_id(user_id)
-    # if user['credit'] < amount:
-    #     return 'Insufficient credit', 400
-    # block user account from removing/adding credit
-    # send ready to commit to coordinator
-
-    # On commit response:
     # TODO check if this update returns ok status
+    amount = int(amount)
     db.users.find_one_and_update(
         {'_id': ObjectId(user_id)},
         {'$inc': {'credit': -amount}},
     )
-    payment = {'user_id': user_id, 'order_id': order_id,  'status': OrderStatus.PAYED}
+    payment = {'user_id': user_id, 'order_id': order_id, 'status': OrderStatus.PAYED}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))
     return True
@@ -122,22 +116,30 @@ def payment_status(user_id: str, order_id: str):
     return payment['status'], 200
 
 
-@app.post('/prepare-pay/<user_id>/<order_id>/<amount>')
+@app.post('/prepare_pay/<user_id>/<amount>')
 def prepare_pay(user_id: str, amount: float):
     amount = int(amount)
     user = find_user_by_id(user_id)
-    return 'Insufficient credit', 400 if user['credit'] < amount else 'Prepare of payment successful', 200
+
+    if user['credit'] < amount:
+        return 'Insufficient credit', 400
+    else:
+        return 'Prepare of payment successful', 200
 
 
-@app.post('/rollback-pay/<user_id>/<order_id>/<amount>')
-def rollback_pay(user_id: str, order_id: str, amount: float):
-    status = add_credit(user_id, order_id, amount)
-    return 'Rolled back successfully', 200 if status else 'Could not rollback', 400
+@app.post('/rollback_pay/<user_id>/<amount>')
+def rollback_pay(user_id: str, amount: float):
+    status = add_credit(user_id, amount)
+    if status:
+        return 'Rolled back successfully', 200
+    else:
+        return 'Could not rollback', 400
 
 
-@app.post('/commit-pay/<user_id>/<order_id>/<amount>')
+@app.post('/commit_pay/<user_id>/<order_id>/<amount>')
 def commit_pay(user_id: str, order_id: str, amount: float):
     status = remove_credit(user_id, order_id, amount)
-    return 'Committed successfully', 200 if status else 'Could not commit', 400
-
-# endregion
+    if status:
+        return 'Committed successfully', 200
+    else:
+        return 'Could not commit', 400

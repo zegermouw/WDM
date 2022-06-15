@@ -1,3 +1,5 @@
+import sys
+
 from flask import Flask, request
 from coordinatorutils import prepare_stock, commit_stock, rollback_stock, prepare_pay, commit_pay, rollback_pay, lock, \
     unlock, is_user_item_locked
@@ -9,33 +11,43 @@ app = Flask("coordinator-service")
 def pay_order(user_id, order_id, price):
     item_ids = request.json
 
-    lock(user_id, item_ids)
+    # boolean value specifies if items should be locked too, can be removed if we want a less strict 2PC
+    if is_user_item_locked(user_id, item_ids):
+        return 'Could not satisfy request as the user or item(s) are locked',
+    lock(user_id, item_ids, True)
     if not is_user_item_locked(user_id, item_ids):
         return 'Error during locking', 500
 
-    prepare1 = prepare_stock(item_ids)
-    prepare2 = prepare_pay(user_id, order_id, price)
+    prep1 = prepare_stock(item_ids)
+    prep2 = prepare_pay(user_id, price)
+
+    prepare1 = prep1.status_code
+    prepare2 = prep2.status_code
 
     # confirmation from order and payment
     if prepare1 == 200 and prepare2 == 200:
         # send commit to order and payment
-        commit1 = commit_stock(item_ids)
-        commit2 = commit_pay(user_id, order_id, price)
-        if commit1 == 200 and commit2 == 200:
+        status_stock = commit_stock(item_ids)
+        status_pay = commit_pay(user_id, order_id, price)
+
+        if status_stock == 200 and status_pay == 200:
             unlock(user_id, item_ids)
             return 'order is payed', 200
         else:
-            if commit2 == 200 and commit1 != 200:
+            if status_pay == 200 and status_stock != 200:
                 unlock(user_id, item_ids)
-                return rollback_pay(user_id, order_id, price)
-            elif commit1 == 200 and commit2 != 200:
+                rollback_pay(user_id, price)
+                return 'Stock could not be committed', 500
+            elif status_stock == 200 and status_pay != 200:
                 unlock(user_id, item_ids)
-                return rollback_stock(item_ids)
+                rollback_stock(item_ids)
+                return 'Payment was not successfully committed', 500
             else:
                 rollback_stock(item_ids)
-                rollback_pay(user_id, order_id, price)
+                rollback_pay(user_id, price)
                 unlock(user_id, item_ids)
-                return 'Rolled back both stock and pay', 200
+                return 'Error in both stock and payment commits', 500
 
     else:
         unlock(user_id, order_id)
+        return 'Prepare phase did not succeed: ' + str(prep1.content) + str(prep2.content), 500
