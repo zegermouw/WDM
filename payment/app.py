@@ -70,7 +70,7 @@ def create_user():
     db.users.insert_one(user.__dict__)
     user.set_id()
     for replica in payment_replicas:
-        requests.put(replica+'/create_user', json=user.__dict__)
+        requests.put(replica + '/create_user', json=user.__dict__)
     return user.dumps(), 200
 
 

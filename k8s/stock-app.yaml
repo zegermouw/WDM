@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: stock
-          image: zegermouw/stock:latest
+          image: mwschutte/stock:latest
           resources:
             limits:
               memory: "1Gi"
@@ -40,11 +40,15 @@ spec:
           ports:
             - containerPort: 5000
           env:
-            - name: REDIS_HOST
-              value: redis-master
-            - name: REDIS_PORT
-              value: '6379'
-            - name: REDIS_PASSWORD
-              value: "redis"
-            - name: REDIS_DB
-              value: "0"
+            - name: GATEWAY_URL
+              value: "mongodb://localhost:27018/db"
+            - name: PORT
+              value: "27018"
+        - name: stock-db
+          args:
+            - mongod
+            - --port
+            - "27018"
+          image: mongo
+          ports:
+            - containerPort: 27018

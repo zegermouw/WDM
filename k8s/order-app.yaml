@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: order
-          image: zegermouw/order:latest
+          image: mwschutte/order:latest
           resources:
             limits:
               memory: "1Gi"
