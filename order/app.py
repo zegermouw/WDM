@@ -39,15 +39,15 @@ def close_db_connection():
 
 def get_pods():
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
-    dict = []
+    pods_dict = []
     for pod in pod_list.items:
         if("order-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
-            dict.append({'name': pod.metadata.name, 'ip': pod.status.pod_ip})
-    print(dict, file=sys.stderr)
-    for dic in dict:
+            pods_dict.append({'name': pod.metadata.name, 'ip': pod.status.pod_ip})
+    print(pods_dict, file=sys.stderr)
+    for dic in pods_dict:
         if(dic["ip"] != IPAddr):
             requests.get("http://" + dic["ip"] + ":5000/test")
-    return dict
+    return pods_dict
 atexit.register(close_db_connection)
 
 
@@ -62,7 +62,7 @@ def test_get2():
 @app.get('/')
 def test_get():
     print("---------------------------------", file=sys.stderr)
-    vector_list = get_pods()
+    this.vector_list = get_pods()
     print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<", file=sys.stderr)
     return "joee", 200
 

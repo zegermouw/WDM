@@ -16,6 +16,10 @@ services:
       - ./data:/data/db
     ports:
       - "27018:27018"
+  order-sharding-service:
+    build: ./order-sharding-service
+    image: order-sharding-service:latest
+    command: gunicorn -b 0.0.0.0:5000 app:app
 
   order-service:
     build: ./order
