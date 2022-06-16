@@ -6,7 +6,6 @@ import requests
 
 from orderutils import subtract_stock, find_item, payment_pay, add_stock
 
-from orderutils import subtract_stock, payment_pay, add_stock
 
 from pymongo import MongoClient
 from flask import Flask
