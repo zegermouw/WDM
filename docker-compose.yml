@@ -27,8 +27,6 @@ services:
       - env/order_mongo.env
 
 
-
-
   stock-service:
     build: ./stock
     image: stock:latest

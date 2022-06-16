@@ -1,4 +1,5 @@
 from datetime import datetime
+from ipaddress import ip_address
 import os
 import sys
 import socket
@@ -14,12 +15,21 @@ from pymongo import MongoClient, ReturnDocument
 from stock import Stock
 from stock_update import StockUpdate
 import kubernetes as k8s
-
+from threading import Thread
 app = Flask("stock-service")
 
 
 client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
+
+
+
+
+
+# pod events:
+DELETED = "DELETED"
+ADDED = 'ADDED'
+MODIFIED = 'MODIFIED' 
 
 
 # get replica pods using kubernets api
@@ -30,19 +40,46 @@ IPAddr=socket.gethostbyname(hostname)
 print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
 
-replicas = []
+def threaded_task():
+    print('Setting up k8s api event listener', file=sys.stderr)
+    w = k8s.watch.Watch()
+    for event in w.stream(v1.list_pod_for_all_namespaces, timeout_seconds=10):
+        pod = event['object']
+        print("Event: %s %s %s" % (
+            event['type'],
+            event['object'].kind,
+            event['object'].metadata.name)
+        ,file=sys.stderr)
+        if 'stock-deployment' in pod.metadata.name:
+            # if there is a new stock-deployment event, refetch al active stock ip
+            get_pods()
+            if event['type'] == DELETED:
+                if pod.metadata.name in replicas:
+                    replicas.pop(pod.metadata.name)
+
+
+thread = Thread(target=threaded_task)
+thread.daemon = True
+thread.start()
+
+
+replicas = {}
 def get_pods():
     global replicas
-    replicas = []
+    replicas = {}
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
     for pod in pod_list.items:
-        if("stock-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
-            replicas.append({
-                'name': pod.metadata.name,
-                'ip': pod.status.pod_ip,
-                'address': f'http://{pod.status.pod_ip}:5000'
-            })
-    print(replicas, file=sys.stderr)
+        if(pod.metadata.name != hostname and "stock-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
+            url = f'http://{pod.status.pod_ip}:5000'
+            try:
+                response = requests.get(f'{url}/alive/{hostname}/{IPAddr}')
+                if response.status_code == 200:
+                    replicas[pod.metadata.name] = url 
+            except requests.exceptions.ConnectionError as e:
+                if pod.metadata.name in replicas:
+                    replicas.pop(pod.metadata.name)
+                print(e, file=sys.stderr)
+        
 
 # read quorum write quorum config
 # TODO consider different write_quorum for add stock and subtract stock
@@ -63,11 +100,12 @@ def get_stock_by_id(item_id: str):
 
 
 def get_quorum_samples(quorum: int):
-    return random.sample(range(len(replicas)), min(len(replicas), quorum))
+    return random.sample(list(replicas.keys()), min(len(replicas), quorum))
 
 
 def get_replica_address(index: int):
-       return replicas[index]['address']
+    key = list(replicas.keys)[index]
+    return replicas[key]['address']
 
 def add_stock_to_db(item_id: str, amount: int, stock_update: StockUpdate) -> Stock:
     stock = db.stock.find_one_and_update(
@@ -78,6 +116,17 @@ def add_stock_to_db(item_id: str, amount: int, stock_update: StockUpdate) -> Sto
     db.stock_updates.insert_one(stock_update.__dict__)
     stock_update.load_id()
     return Stock.loads(stock)
+
+
+@app.get('/alive/<hostname>/<ip_address>')
+def im_alive(hostname: str, ip_address: str):
+    replicas[hostname] = f'http://{ip_address}:5000'
+    return 'ok', 200
+
+@app.get('/pods')
+def config_pods():
+    return dumps(replicas)
+
 
 @app.post('/item/create/<price>')
 def create_item(price: int):
@@ -94,8 +143,7 @@ def create_item(price: int):
     # Send stock item to write_quorum
     candidates = get_quorum_samples(write_quorum)
     for i in candidates:
-        candidate = replicas[i]
-        replica_address = candidate['address'] 
+        replica_address = replicas[i]
         requests.put(replica_address + '/item/create', json=stock.__dict__)
         # TODO check if the requests are ok and handle accordingly if they fail
 
