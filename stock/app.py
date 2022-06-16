@@ -89,7 +89,7 @@ def prepare_stock():
     items = request.json
     for item in items:
         if not check_stock(item, items[item]):
-            return f'Not enough stock for item: {item}', 400
+            return f'Not enough stock for item: {item}', 500
 
     return 'Successfully prepared stock', 200
 
@@ -99,7 +99,7 @@ def commit_stock():
     items = request.json
     for item in items:
         if not remove_stock(item, items[item]):
-            return 'An item did not have enough stock, commit aborted', 400
+            return 'An item did not have enough stock, commit aborted', 500
 
     return 'Successfully committed stock', 200
 
@@ -111,6 +111,6 @@ def rollback_stock():
         status = add_stock(item, items[item])
         print(status, file=sys.stderr)
         if status[1] != 200:
-            return 'Something went wrong while rolling back stock', 400
+            return 'Something went wrong while rolling back stock', 500
 
     return 'Rolled back Stock', 200

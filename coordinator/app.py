@@ -13,11 +13,9 @@ def pay_order(user_id, order_id, price):
 
     # boolean value specifies if items should be locked too, can be removed if we want a less strict 2PC
     if is_user_item_locked(user_id, item_ids):
-        print('ITEM LOCKED', file=sys.stderr)
         return 'Could not satisfy request as the user or item(s) are locked', 403
     lock(user_id, item_ids, True)
     if not is_user_item_locked(user_id, item_ids):
-        print('ERROR DURING LOCKING', file=sys.stderr)
         return 'Error during locking', 500
 
     prep1 = prepare_stock(item_ids)
@@ -34,27 +32,22 @@ def pay_order(user_id, order_id, price):
 
         if status_stock == 200 and status_pay == 200:
             unlock(user_id, item_ids)
-            print('ORDER IS PAYED RETURN', file=sys.stderr)
             return 'order is payed', 200
         else:
             if status_pay == 200 and status_stock != 200:
                 unlock(user_id, item_ids)
                 rollback_pay(user_id, price)
-                print('STOCK NOT COMMITTED RETURN', file=sys.stderr)
-                return 'Stock could not be committed', 500
+                return 'Stock could not be committed', 400
             elif status_stock == 200 and status_pay != 200:
                 unlock(user_id, item_ids)
                 rollback_stock(item_ids)
-                print('PAYMENT NOT COMMITTED RETURN', file=sys.stderr)
-                return 'Payment was not successfully committed', 500
+                return 'Payment was not successfully committed', 400
             else:
                 rollback_stock(item_ids)
                 rollback_pay(user_id, price)
                 unlock(user_id, item_ids)
-                print('BOTH STOCK AND PAYMENT NOT COMMITTED RETURN', file=sys.stderr)
-                return 'Error in both stock and payment commits', 500
+                return 'Error in both stock and payment commits', 400
 
     else:
         unlock(user_id, order_id)
-        print('PREPARE PHASE RETURN', file=sys.stderr)
-        return 'Prepare phase did not succeed: ' + str(prep1.content) + str(prep2.content), 500
+        return 'Prepare phase did not succeed: ' + str(prep1.content) + str(prep2.content), 400
