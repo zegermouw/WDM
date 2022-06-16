@@ -5,7 +5,7 @@ import sys
 from orderutils import find_item, pay_order
 
 from pymongo import MongoClient
-from flask import Flask
+from flask import Flask, jsonify
 from bson.objectid import ObjectId
 
 from order import Order
@@ -48,7 +48,7 @@ def create_order(user_id):
     order = Order(user_id=user_id)
     db.orders.insert_one(order.__dict__)
     order.order_id = str(order.__dict__.pop('_id'))  # Since order should have order_id instead of _id.
-    return order.dumps(), 200
+    return jsonify(order), 200
 
 
 @app.delete('/remove/<order_id>')
@@ -69,7 +69,7 @@ def add_item(order_id, item_id):
     if not status:
         return 'The orderid is locked', 400
     else:
-        return order.dumps(), 200
+        return jsonify(order), 200
 
 
 @app.delete('/removeItem/<order_id>/<item_id>')
@@ -91,7 +91,7 @@ def remove_item(order_id, item_id):
 def find_order(order_id):
     order = db.orders.find_one({"_id": ObjectId(order_id)})
     order = Order.loads(order)
-    return order.dumps(), 200
+    return jsonify(order), 200
 
 
 @app.post('/checkout/<order_id>')

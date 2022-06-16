@@ -2,7 +2,7 @@ import os
 import atexit
 import sys
 
-from flask import Flask, request
+from flask import Flask, request, Response, jsonify
 import redis
 from stock import Stock
 
@@ -30,7 +30,8 @@ def create_item(price: int):
     """
     s = Stock.new(int(price))
     db.set(s.item_id, s.dumps())
-    return s.dumps()
+
+    return jsonify(s)
 
 
 @app.get('/find/<item_id>')
@@ -40,7 +41,9 @@ def find_item(item_id: str):
     :param item_id:
     :return: Stock
     """
-    return db.get(item_id)
+    d = db.get(item_id)
+    s = Stock.loads(d)
+    return jsonify(s)
 
 
 @app.post('/add/<item_id>/<amount>')
@@ -55,7 +58,7 @@ def add_stock(item_id: str, amount: int):
     s = Stock.loads(d)
     s.stock += int(amount)
     db.set(s.item_id, s.dumps())
-    return s.dumps(), 200
+    return jsonify(s), 200
 
 
 def remove_stock(item_id: str, amount: int):

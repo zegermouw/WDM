@@ -3,7 +3,7 @@ import os
 import sys
 from enum import Enum
 
-from flask import Flask
+from flask import Flask, jsonify
 
 import json
 
@@ -55,13 +55,13 @@ def find_user_by_id(user_id):
 def create_user():
     user = User()
     user_id = db.users.insert_one(user.dict()).inserted_id
-    return json.dumps({'user_id': str(user_id)}), 200
+    return jsonify({'user_id': str(user_id)}), 200
 
 
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
     user = find_user_by_id(user_id)
-    return str(json.dumps(user, default=json_util.default)), 200
+    return jsonify(user), 200
 
 
 @app.post('/add_funds/<user_id>/<amount>')
@@ -73,7 +73,7 @@ def add_credit(user_id: str, amount: float):
         return_document=ReturnDocument.AFTER
     )
     user['user_id'] = str(user.pop('_id'))
-    return json.dumps(user), 200
+    return jsonify(user), 200
 
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
@@ -105,7 +105,7 @@ def cancel_payment(user_id: str, order_id: str):
         return_document=ReturnDocument.AFTER
     )
     payment['payment_id'] = str(payment.pop('_id'))
-    return json.dumps(payment), 200
+    return jsonify(payment), 200
 
 
 @app.post('/status/<user_id>/<order_id>')
