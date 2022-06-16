@@ -17,3 +17,4 @@ def payment_pay(user_id: str, order_id: str, amount: float) -> int:
 
 def add_stock(item_id: str, amount: int) -> int:
     return requests.post(f"{STOCK_URL}/stock/add/{item_id}/{amount}").status_code
+

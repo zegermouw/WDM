@@ -29,6 +29,8 @@ services:
     env_file:
       - env/order_mongo.env
 
+
+
 #  order-db:
 #    image: redis:latesta
 #    command: redis-server --requirepass redis --maxmemory 512mb
@@ -44,17 +46,49 @@ services:
     image: redis:latest
     command: redis-server --requirepass redis --maxmemory 512mb
 
-  payment-service:
+  payment-service0:
     build: ./payment
     image: payment:latest
-    command: gunicorn -b 0.0.0.0:5000 app:app
-    env_file:
-      - env/payment_mongo.env
+    expose:
+      - "5000"
+    command: gunicorn --worker-class=gevent --worker-connections=1000 -b 0.0.0.0:5000 app:app # -k gevent --worker-connections 100 (i dont know why this not working) could also add --threads 12
+    environment:
+      - OTHER_NODE=http://payment-service1
+      - PORT=27017
+      - GATEWAY_URL=mongodb://payment-db0:27017/db
+      - REPLICATION_NUMBER=0
+      - FLASK_ENV=development
 
-  payment-db:
-    container_name: payment-db
+  payment-service1:
+    build: ./payment
+    image: payment:latest
+    expose:
+      - "5000"
+    command: gunicorn --worker-class=gevent --worker-connections=1000 -b 0.0.0.0:5000 app:app
+#    env_file:
+#      - env/payment_mongo.env
+    environment:
+      - OTHER_NODE=http://payment-service0
+      - PORT=27019
+      - GATEWAY_URL=mongodb://payment-db1:27019/db
+      - REPLICATION_NUMBER=1
+      - FLASK_ENV=development
+
+
+
+  payment-db0:
+    container_name: payment-db0
     image: mongo
     ports:
       - "27017:27017"
     volumes:
       - ./mongodb_data_container:/data/db
+
+  payment-db1:
+    container_name: payment-db1
+    image: mongo
+    ports:
+      - "27019:27019"
+    command: mongod --port 27019
+    volumes:
+      - ./mongodb_data_container:/data/db1
