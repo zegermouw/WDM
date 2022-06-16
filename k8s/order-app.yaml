@@ -11,20 +11,12 @@ spec:
       name: http
       targetPort: 5000
 ---
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: local-storage
-provisioner: kubernetes.io/gce-pd
-reclaimPolicy: Retain
----
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
-  name: order-set
+  name: order-deployment
 spec:
-  replicas: 1
-  serviceName: order-service
+  replicas: 5
   selector:
     matchLabels:
       component: order
@@ -36,13 +28,6 @@ spec:
       containers:
         - name: order
           image: zegermouw/order:latest
-          resources:
-            limits:
-              memory: "1Gi"
-              cpu: "1"
-            requests:
-              memory: "1Gi"
-              cpu: "1"
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app"]
           ports:
@@ -64,17 +49,7 @@ spec:
           image: mongo
           ports:
             - containerPort: 27018
-          volumeMounts:
-            - mountPath: /data/db
-              name: order-pvc
-  volumeClaimTemplates:
-    - metadata:
-        name: order-pvc
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        storageClassName: local-storage
-        resources:
-          requests:
-            storage: 1Gi
+
+
 
 

@@ -32,6 +32,8 @@ print("running on: " + IPAddr, file=sys.stderr)
 vector_clock = 0
 vector_list = []
 
+db_queue = []
+
 def close_db_connection():
     db.close()
 
@@ -39,13 +41,13 @@ def get_pods():
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
     dict = []
     for pod in pod_list.items:
-        if("order-set" in pod.metadata.name and pod.status.phase == 'Running'):
+        if("order-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
             dict.append({'name': pod.metadata.name, 'ip': pod.status.pod_ip})
     print(dict, file=sys.stderr)
     for dic in dict:
         if(dic["ip"] != IPAddr):
             requests.get("http://" + dic["ip"] + ":5000/test")
-
+    return dict
 atexit.register(close_db_connection)
 
 
@@ -60,7 +62,7 @@ def test_get2():
 @app.get('/')
 def test_get():
     print("---------------------------------", file=sys.stderr)
-    get_pods()
+    vector_list = get_pods()
     print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<", file=sys.stderr)
     return "joee", 200
 
@@ -69,8 +71,16 @@ def create_order(user_id):
     order = Order(user_id=user_id)
     db.orders.insert_one(order.__dict__)
     order.order_id = str(order.__dict__.pop('_id'))  # Since order should have order_id instead of _id.
+    db_queue.append(order)
     return order.dumps(), 200
 
+@app.post('/create/frompod/<user_id>')
+def create_order_from_pod(user_id)
+    order = Order(user_id=user_id)
+    db.orders.insert_one(order.__dict__)
+    order.order_id = str(order.__dict__.pop('_id'))  # Since order should have order_id instead of _id.
+    db_queue.append(order)
+    return order.dumps(), 200
 
 @app.delete('/remove/<order_id>')
 def remove_order(order_id):
