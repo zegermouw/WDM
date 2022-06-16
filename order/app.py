@@ -24,25 +24,6 @@ def close_db_connection():
 
 atexit.register(close_db_connection)
 
-locks = []
-
-
-def delete_one(order_id):
-    if order_id in locks:
-        return False
-    else:
-        status = db.orders.delete_one({"_id": ObjectId(order_id)})
-        return str(status)
-
-
-def update_one(order_id, order):
-    if order_id in locks:
-        return False
-    else:
-        status = db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
-        return str(status)
-
-
 @app.post('/create/<user_id>')
 def create_order(user_id):
     order = Order(user_id=user_id)
@@ -53,7 +34,7 @@ def create_order(user_id):
 
 @app.delete('/remove/<order_id>')
 def remove_order(order_id):
-    status = delete_one(order_id)
+    status = db.orders.delete_one({"_id": ObjectId(order_id)})
     if not status:
         return 'The orderid is locked', 400
     else:
@@ -65,7 +46,7 @@ def add_item(order_id, item_id):
     j = db.orders.find_one({"_id": ObjectId(order_id)})
     order = Order.loads(j)
     order.items.append(item_id)
-    status = update_one(order_id, order)
+    status = db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
     if not status:
         return 'The orderid is locked', 400
     else:
@@ -77,7 +58,7 @@ def remove_item(order_id, item_id):
     order = db.orders.find_one({"_id": ObjectId(order_id)})
     if item_id in order['items']:
         order['items'].remove(item_id)
-        status = update_one(order_id, order)
+        status = db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
         if not status:
             return 'The orderid is locked', 400
         else:
