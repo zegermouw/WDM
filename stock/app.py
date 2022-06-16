@@ -16,14 +16,15 @@ from stock import Stock
 from stock_update import StockUpdate
 import kubernetes as k8s
 from threading import Thread
+
+
+#flask app
 app = Flask("stock-service")
 
 
+#mongodb client
 client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
-
-
-
 
 
 # pod events:
@@ -40,7 +41,11 @@ IPAddr=socket.gethostbyname(hostname)
 print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
 
+
 def threaded_task():
+    """
+    Threaded task listens to k8s api event and loads all replicas
+    """
     print('Setting up k8s api event listener', file=sys.stderr)
     w = k8s.watch.Watch()
     for event in w.stream(v1.list_pod_for_all_namespaces, timeout_seconds=10):
@@ -58,6 +63,7 @@ def threaded_task():
                     replicas.pop(pod.metadata.name)
 
 
+# tread to listen to k8s api
 thread = Thread(target=threaded_task)
 thread.daemon = True
 thread.start()
@@ -65,6 +71,10 @@ thread.start()
 
 replicas = {}
 def get_pods():
+    """
+    Gets replica ip addresses and stores them im replicas set
+    TODO add extra check after timeout to check if its still alive since shuting down can take some time. (try something like javascript timeout)
+    """
     global replicas
     replicas = {}
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
@@ -79,7 +89,7 @@ def get_pods():
                 if pod.metadata.name in replicas:
                     replicas.pop(pod.metadata.name)
                 print(e, file=sys.stderr)
-        
+ 
 
 # read quorum write quorum config
 # TODO consider different write_quorum for add stock and subtract stock
@@ -96,6 +106,8 @@ atexit.register(close_db_connection)
 
 def get_stock_by_id(item_id: str):
     stock = db.stock.find_one({"_id": ObjectId(str(item_id))})
+    if stock is None:
+        return 'not found', 400
     return Stock.loads(stock)
 
 
@@ -104,7 +116,7 @@ def get_quorum_samples(quorum: int):
 
 
 def get_replica_address(index: int):
-    key = list(replicas.keys)[index]
+    key = list(replicas.keys())[index]
     return replicas[key]['address']
 
 def add_stock_to_db(item_id: str, amount: int, stock_update: StockUpdate) -> Stock:
@@ -144,15 +156,18 @@ def create_item(price: int):
     candidates = get_quorum_samples(write_quorum)
     for i in candidates:
         replica_address = replicas[i]
-        requests.put(replica_address + '/item/create', json=stock.__dict__)
+        response = requests.put(replica_address + '/item/create', json=stock.__dict__)
         # TODO check if the requests are ok and handle accordingly if they fail
+        if response.status_code != 200:
+            print(response, file=sys.stderr)
 
     return stock.dumps()
 
 @app.put('/item/create')
 def insert_item():
     item = Stock.loads(request.json)
-    db.stock.insert_one({'_id': ObjectId(item), **item.__dict__})
+    db.stock.insert_one({'_id': ObjectId(item.item_id), **item.__dict__})
+    print(f'CREATED item with item id {item.item_id}', file=sys.stderr)
     return 'ok', 200
 
 
@@ -179,7 +194,7 @@ def find_item(item_id: str):
     stock_replicas = []
     stock_replicas.append(stock)
     for i in candidates:
-        replica_address = get_replica_address(i)
+        replica_address = replicas[i]
         response = requests.get(f'{replica_address}/find_one/{item_id}')
         if response.status_code == 200:
             stock = stock.loads(response.json())
