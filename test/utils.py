@@ -1,4 +1,5 @@
 import requests
+import grequests
 
 ORDER_URL = STOCK_URL = PAYMENT_URL = "http://127.0.0.1:8000"
 
@@ -39,6 +40,30 @@ def find_user(user_id: str) -> dict:
 
 def add_credit_to_user(user_id: str, amount: float) -> int:
     return requests.post(f"{PAYMENT_URL}/payment/add_funds/{user_id}/{amount}").status_code
+
+# some test for paxos, where docker is setup with 2 service instances of payment
+def create_user_service0() -> dict:
+    return requests.post(f"{PAYMENT_URL}/payment0/create_user").json()
+
+
+def find_user_service0(user_id: str) -> dict:
+    return requests.get(f"{PAYMENT_URL}/payment0/find_user/{user_id}").json()
+
+def find_user_service1(user_id: str) -> dict:
+    return requests.get(f"{PAYMENT_URL}/payment1/find_user/{user_id}").json()
+
+
+def add_credit_to_user0(user_id: str, amount: float) -> int:
+    return requests.post(f"{PAYMENT_URL}/payment0/add_funds/{user_id}/{amount}").status_code
+
+def test_prepare_endpoint(proposal_id: int, proposal_value: dict):
+    return requests.post(f"{PAYMENT_URL}/payment0/prepare", json={'proposal_id':proposal_id, 'proposal_value': proposal_value}).status_code
+
+def async_add_credit_to_user(user_id: str, amount: float, service: int) -> int:
+    return grequests.post(f"{PAYMENT_URL}/payment{str(service)}/add_funds/{user_id}/{amount}")
+
+def async_remove_credit_from_user(user_id: str, order_id: str, amount: float, service: int) -> int:
+    return grequests.post(f"{PAYMENT_URL}/payment{str(service)}/pay/{user_id}/{order_id}/{amount}")
 
 
 ########################################################################################################################
