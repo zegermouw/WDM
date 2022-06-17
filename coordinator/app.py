@@ -1,5 +1,3 @@
-import sys
-
 from flask import Flask, request
 from coordinatorutils import prepare_stock, commit_stock, rollback_stock, prepare_pay, commit_pay, rollback_pay, lock, \
     unlock, is_user_item_locked

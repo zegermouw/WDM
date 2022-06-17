@@ -28,7 +28,7 @@ def create_item(price: int):
     :param price:
     :return: Stock
     """
-    s = Stock.new(int(price))
+    s = Stock.new(int(float(price)))
     db.set(s.item_id, s.dumps())
 
     return jsonify(s)
@@ -56,7 +56,7 @@ def add_stock(item_id: str, amount: int):
     """
     d = db.get(item_id)
     s = Stock.loads(d)
-    s.stock += int(amount)
+    s.stock += int(float(amount))
     db.set(s.item_id, s.dumps())
     return jsonify(s), 200
 
@@ -68,7 +68,7 @@ def remove_stock(item_id: str, amount: int):
     :param amount: The amount to remove from the stock.
     :return: Stock item.
     """
-    amount = int(amount)
+    amount = int(float(amount))
     d = db.get(item_id)
     s = Stock.loads(d)
     if s.stock - amount < 0:
@@ -109,7 +109,6 @@ def rollback_stock():
     items = request.json
     for item in items:
         status = add_stock(item, items[item])
-        print(status, file=sys.stderr)
         if status[1] != 200:
             return 'Something went wrong while rolling back stock', 500
 

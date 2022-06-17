@@ -66,7 +66,7 @@ def find_user(user_id: str):
 
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: float):
-    amount = int(amount)
+    amount = int(float(amount))
     user = db.users.find_one_and_update(
         {'_id': ObjectId(user_id)},
         {'$inc': {'credit': amount}},
@@ -78,8 +78,7 @@ def add_credit(user_id: str, amount: float):
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
 def remove_credit(user_id: str, order_id: str, amount: float):
-    # TODO check if this update returns ok status
-    amount = int(amount)
+    amount = int(float(amount))
     db.users.find_one_and_update(
         {'_id': ObjectId(user_id)},
         {'$inc': {'credit': -amount}},
@@ -118,7 +117,7 @@ def payment_status(user_id: str, order_id: str):
 
 @app.post('/prepare_pay/<user_id>/<amount>')
 def prepare_pay(user_id: str, amount: float):
-    amount = int(amount)
+    amount = int(float(amount))
     user = find_user_by_id(user_id)
 
     if user['credit'] < amount:

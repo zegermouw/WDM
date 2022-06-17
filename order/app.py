@@ -58,7 +58,7 @@ def remove_item(order_id, item_id):
     order = db.orders.find_one({"_id": ObjectId(order_id)})
     if item_id in order['items']:
         order['items'].remove(item_id)
-        status = db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
+        status = db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order}, upsert=False)
         if not status:
             return 'The orderid is locked', 400
         else:
