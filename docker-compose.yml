@@ -90,6 +90,8 @@ services:
   payment-db1:
     container_name: payment-db1
     image: mongo
+    logging:
+      driver: "none"
     ports:
       - "27019:27019"
     command: mongod --port 27019

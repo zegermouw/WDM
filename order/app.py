@@ -24,6 +24,7 @@ def close_db_connection():
 
 atexit.register(close_db_connection)
 
+
 @app.post('/create/<user_id>')
 def create_order(user_id):
     order = Order(user_id=user_id)

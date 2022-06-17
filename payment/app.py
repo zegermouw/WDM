@@ -70,11 +70,11 @@ def create_user():
     :return: User object and status 200 if everything ok.
     """
     user = User()
-    db.users.insert_one(user.__dict__)
+    user_id = db.users.insert_one(user.__dict__).inserted_id
     user.set_id()
     for replica in payment_replicas:
         requests.put(replica + '/create_user', json=user.__dict__)
-    return jsonify(user.__dict__), 200
+    return jsonify({'user_id': str(user_id)}), 200
 
 
 @app.put('/create_user')
@@ -90,25 +90,11 @@ def find_user(user_id: str):
     return jsonify(user), 200
 
 
-times = 0
-
-
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: float):
-    amount = int(float(amount))
-    user = db.users.find_one_and_update(
-        {'_id': ObjectId(user_id)},
-        {'$inc': {'credit': amount}},
-        return_document=ReturnDocument.AFTER
-    )
-    user['user_id'] = str(user.pop('_id'))
-    return jsonify(user), 200
-
-
-def add_credit(user_id: str, amount: int):
     # TODO restrict number of retries for Paxos.NOT_ACCEPTED
     app.logger.info("times: %s, requesting add funds with amount %s, and user_id %s", i, amount, user_id)
-    amount = int(amount)
+    amount = float(amount)
     user = find_user_by_id(user_id)
     user['credit'] += amount
     transaction_id = str(uuid.uuid4())
@@ -123,8 +109,8 @@ def add_credit(user_id: str, amount: int):
 
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
-def remove_credit(user_id: str, order_id: str, amount: int):
-    amount = int(float(amount))
+def remove_credit(user_id: str, order_id: str, amount: float):
+    amount = float(amount)
     user = find_user_by_id(user_id)
     if user['credit'] < amount:
         return False
@@ -186,7 +172,7 @@ def acceptor_accept():
 
 @app.post('/prepare_pay/<user_id>/<amount>')
 def prepare_pay(user_id: str, amount: float):
-    amount = int(float(amount))
+    amount = float(amount)
     user = find_user_by_id(user_id)
 
     if user['credit'] < amount:
