@@ -16,7 +16,7 @@ kind: Deployment
 metadata:
   name: order-deployment
 spec:
-  replicas: 5
+  replicas: 4
   selector:
     matchLabels:
       component: order
@@ -37,9 +37,9 @@ spec:
               value: "payment-service"
             - name: STOCK_SERVICE_URL
               value: "stock-service"
-            - name: ORDER_GATEWAY
+            - name: GATEWAY_URL
               value: "mongodb://localhost:27018/db"
-            - name: ORDER_PORT
+            - name: PORT
               value: "27018"
         - name: order-db
           args:

@@ -16,7 +16,7 @@ from paxos import Paxos
 
 app = Flask("payment-service")
 
-myclient = pymongo.MongoClient(os.environ['PAYMENT_GATEWAY'], int(os.environ['PAYMENT_PORT']))
+myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
 payment_replicas: list[str] = [os.environ['OTHER_NODE']]
 port = '5000'
@@ -100,8 +100,8 @@ def add_credit(user_id: str, amount: int):
     response, accepted_user = paxos.proposer_prepare(user)
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
-        return add_credit(user_id, amount) 
-    if accepted_user['transaction_id']!=user['transaction_id']:     
+        return add_credit(user_id, amount)
+    if accepted_user['transaction_id']!=user['transaction_id']:
         return add_credit(user_id, amount)
     return 'ACCEPTED', 200
 
@@ -118,8 +118,8 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
-        return remove_credit(user_id, order_id, amount) 
-    if accepted_user['transaction_id']!=user['transaction_id']:     
+        return remove_credit(user_id, order_id, amount)
+    if accepted_user['transaction_id']!=user['transaction_id']:
         return remove_credit(user_id, order_id, amount)
     payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
     db.payments.insert_one(payment)

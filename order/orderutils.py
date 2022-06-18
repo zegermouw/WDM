@@ -1,5 +1,5 @@
 import requests
-ORDER_URL = STOCK_URL = PAYMENT_URL = "http://host.docker.internal:8000"
+ORDER_URL = STOCK_URL = PAYMENT_URL = "http://localhost"
 
 
 def subtract_stock(item_id: str, amount: int) -> (dict, int):
