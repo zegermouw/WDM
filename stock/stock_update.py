@@ -5,11 +5,10 @@ import json
 @dataclass
 class StockUpdate:
     "Class for keeping track of stock updates"
-    _id = None
     item_id: str
     amount: float
-    local_time_stamp: datetime
     node: str
+    _id: str = None
     
     def dumps(self):
         json.dumps(self.__dict__)
@@ -22,4 +21,4 @@ class StockUpdate:
     
     def load_id(self):
         if '_id' in self.__dict__:
-            self._id = str(self.dict.pop('_id'))
+            self._id = str(self.__dict__.pop('_id'))

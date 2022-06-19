@@ -1,7 +1,7 @@
 import requests
 import grequests
 
-ORDER_URL = STOCK_URL = PAYMENT_URL = "http://127.0.0.1:8000"
+ORDER_URL = STOCK_URL = PAYMENT_URL = "http://127.0.0.1"
 
 
 ########################################################################################################################
