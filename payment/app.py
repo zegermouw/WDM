@@ -1,7 +1,9 @@
 import atexit
 import os
 from enum import Enum
-from flask import Flask, request, logging
+
+from flask import Flask, jsonify, request, logging
+
 import json
 import requests
 from bson import json_util
@@ -9,7 +11,6 @@ import pymongo
 from pymongo import ReturnDocument
 from bson.objectid import ObjectId
 import uuid
-
 
 from models import User
 from paxos import Paxos
@@ -26,6 +27,7 @@ for i in range(len(payment_replicas)):
 
 replication_number = int(os.environ['REPLICATION_NUMBER'])
 
+
 def close_db_connection():
     myclient.close()
 
@@ -33,6 +35,7 @@ def close_db_connection():
 atexit.register(close_db_connection)
 base_url = "http://host.docker.internal"
 paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
+
 
 # region MODEL
 
@@ -67,11 +70,11 @@ def create_user():
     :return: User object and status 200 if everything ok.
     """
     user = User()
-    db.users.insert_one(user.__dict__)
+    user_id = db.users.insert_one(user.__dict__).inserted_id
     user.set_id()
     for replica in payment_replicas:
         requests.put(replica + '/create_user', json=user.__dict__)
-    return user.dumps(), 200
+    return jsonify({'user_id': str(user_id)}), 200
 
 
 @app.put('/create_user')
@@ -84,15 +87,14 @@ def insert_user():
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
     user = find_user_by_id(user_id)
-    return str(json.dumps(user, default=json_util.default)), 200
+    return jsonify(user), 200
 
 
-times = 0
 @app.post('/add_funds/<user_id>/<amount>')
-def add_credit(user_id: str, amount: int):
+def add_credit(user_id: str, amount: float):
     # TODO restrict number of retries for Paxos.NOT_ACCEPTED
     app.logger.info("times: %s, requesting add funds with amount %s, and user_id %s", i, amount, user_id)
-    amount = int(amount)
+    amount = float(amount)
     user = find_user_by_id(user_id)
     user['credit'] += amount
     transaction_id = str(uuid.uuid4())
@@ -101,16 +103,17 @@ def add_credit(user_id: str, amount: int):
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
         return add_credit(user_id, amount)
-    if accepted_user['transaction_id']!=user['transaction_id']:
+    if accepted_user['transaction_id'] != user['transaction_id']:
         return add_credit(user_id, amount)
     return 'ACCEPTED', 200
 
+
 @app.post('/pay/<user_id>/<order_id>/<amount>')
-def remove_credit(user_id: str, order_id: str, amount: int):
-    amount = int(amount)
+def remove_credit(user_id: str, order_id: str, amount: float):
+    amount = float(amount)
     user = find_user_by_id(user_id)
     if user['credit'] < amount:
-        return 'Insufficient credit', 400
+        return False
 
     user['credit'] -= amount
     user['transaction_id'] = str(uuid.uuid4())
@@ -119,18 +122,18 @@ def remove_credit(user_id: str, order_id: str, amount: int):
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
         return remove_credit(user_id, order_id, amount)
-    if accepted_user['transaction_id']!=user['transaction_id']:
+    if accepted_user['transaction_id'] != user['transaction_id']:
         return remove_credit(user_id, order_id, amount)
     payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))
-    return json.dumps(payment), 200
+    return True
 
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
     """
-    Cancels the payment (should this method alsoa dd the amount of the order
+    Cancels the payment (should this method also add the amount of the order
     back to the users account?)
     :param user_id:
     :param order_id:
@@ -142,7 +145,7 @@ def cancel_payment(user_id: str, order_id: str):
         return_document=ReturnDocument.AFTER
     )
     payment['payment_id'] = str(payment.pop('_id'))
-    return json.dumps(payment), 200
+    return jsonify(payment), 200
 
 
 @app.post('/status/<user_id>/<order_id>')
@@ -167,10 +170,30 @@ def acceptor_accept():
     return paxos.acceptor_accept(content['accepted_id'], content['accepted_value'])
 
 
-@app.get('/hallo')
-def hallo():
-    return json.dumps(payment_replicas), 200
+@app.post('/prepare_pay/<user_id>/<amount>')
+def prepare_pay(user_id: str, amount: float):
+    amount = float(amount)
+    user = find_user_by_id(user_id)
 
-# requests.post("http://host.docker.internal:8000/payment/alive")
+    if user['credit'] < amount:
+        return 'Insufficient credit', 400
+    else:
+        return 'Prepare of payment successful', 200
 
-# endregion
+
+@app.post('/rollback_pay/<user_id>/<amount>')
+def rollback_pay(user_id: str, amount: float):
+    status = add_credit(user_id, amount)
+    if status:
+        return 'Rolled back successfully', 200
+    else:
+        return 'Could not rollback', 400
+
+
+@app.post('/commit_pay/<user_id>/<order_id>/<amount>')
+def commit_pay(user_id: str, order_id: str, amount: float):
+    status = remove_credit(user_id, order_id, amount)
+    if status:
+        return 'Committed successfully', 200
+    else:
+        return 'Could not commit', 400
