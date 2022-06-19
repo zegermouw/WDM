@@ -85,7 +85,49 @@ def get_pods():
                 if pod.metadata.name in replicas:
                     replicas.pop(pod.metadata.name)
                 print(e, file=sys.stderr)
- 
+
+
+# update service with other logs
+
+def get_stock_update_log():
+    all_stock_updates = db.stock_updates.find()
+    res = {}
+    for stock_update in all_stock_updates:
+        su = StockUpdate.loads(stock_update)
+        res[su.update_id] = su.__dict__
+    return res
+
+
+def log_iterator():
+    for replica_url in replicas.values():
+        response = requests.get(f'{replica_url}/log')
+        if response != 200:
+            continue # request did not turn ok so no log
+        yield response.json
+
+
+def compare_logs(own_log, other_log):
+    """
+        compares own_log with other_log and returns the transactions that did
+        not take place at own node
+    """
+    own_log_key_set = set(own_log.keys())
+    other_log_key_set = set(other_log.keys())
+    not_in_own_key_set = other_log_key_set - own_log_key_set
+    return {k:other_log_key_set[k] for k in not_in_own_key_set}
+
+
+def query_logs_and_update():
+    for other_log in log_iterator():
+        own_log = get_stock_update_log()
+        not_in_own_log = compare_logs(own_log, other_log)
+        update_stock_from_log(not_in_own_log)
+
+
+def update_stock_from_log(to_be_updated):
+    for update_item in to_be_updated.values():
+        add_stock_to_db(update_item['item_id'], update_item['amount'], update_item)
+
 
 # read quorum write quorum config
 # TODO consider different write_quorum for add stock and subtract stock
@@ -308,9 +350,6 @@ def remove_stock(item_id: str, amount: int):
 
 
 @app.get('/log')
-def get_stock_update_log():
-    all_stock_updates = db.stock_updates.find()
-    res = []
-    for stock_update in all_stock_updates:
-        res.append(StockUpdate.loads(stock_update).__dict__)
-    return dumps(res), 200
+def get_stock_update_log_response():
+    stock_update_log = get_stock_update_log()
+    return dumps(stock_update_log), 200
