@@ -13,12 +13,13 @@ from flask import request as flask_request
 
 from bson import json_util
 from bson.objectid import ObjectId
+import kubernetes as k8s
 
 from order import Order
 
-# gateway_url = os.environ['GATEWAY_URL']
 
 app = Flask("order-service")
+
 
 client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
@@ -28,6 +29,16 @@ IPAddr=socket.gethostbyname(hostname)
 print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
 
+k8s.config.load_incluster_config()
+v1 = k8s.client.CoreV1Api()
+
+def pingSharding():
+    pod_list = v1.list_pod_for_all_namespaces(watch=False)
+    print("ping sharding", file=sys.stderr)
+    pass
+
+
+pingSharding()
 # vector_clock = 0
 # vector_list = []
 #

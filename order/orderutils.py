@@ -1,5 +1,5 @@
 import requests
-ORDER_URL = STOCK_URL = PAYMENT_URL = "http://localhost"
+ORDER_URL = STOCK_URL = PAYMENT_URL = "http://stock-service:5000"
 
 
 def subtract_stock(item_id: str, amount: int) -> (dict, int):
