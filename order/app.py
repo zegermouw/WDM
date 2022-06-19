@@ -51,18 +51,6 @@ atexit.register(close_db_connection)
 # TODO: handle error handling for when mongodb fails.
 # TODO: Better handle mongodb response format.
 
-@app.get('/test')
-def test_get2():
-    print("got message from: " + flask_request.remote_addr, file=sys.stderr)
-    return "test", 200
-
-@app.get('/')
-def test_get():
-    print("---------------------------------", file=sys.stderr)
-    get_pods()
-    print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<", file=sys.stderr)
-    return "joee", 200
-
 @app.post('/create/<user_id>')
 def create_order(user_id):
     order = Order(user_id=user_id)
@@ -138,7 +126,3 @@ def checkout(order_id):
 def rollback_items(items):
     for item_id in items:
         add_stock(item_id, 1)
-
-@app.get('/hey')
-def hey():
-    return 'heyy', 200
