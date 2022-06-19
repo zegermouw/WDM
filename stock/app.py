@@ -310,4 +310,7 @@ def remove_stock(item_id: str, amount: int):
 @app.get('/log')
 def get_stock_update_log():
     all_stock_updates = db.stock_updates.find()
-    return dumps(all_stock_updates), 200
+    res = []
+    for stock_update in all_stock_updates:
+        res.append(StockUpdate.loads(stock_update).__dict__)
+    return dumps(res), 200
