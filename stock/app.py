@@ -100,10 +100,14 @@ def close_db_connection():
 atexit.register(close_db_connection)
 
 
+class StockNotFoundException(Exception):
+    """stock not found"""
+    pass
+
 def get_stock_by_id(item_id: str):
     stock = db.stock.find_one({"_id": ObjectId(str(item_id))})
     if stock is None:
-        return 'not found', 400
+        raise StockNotFoundException()
     return Stock.loads(stock)
 
 
@@ -166,7 +170,10 @@ def insert_item():
 
 @app.get('/find_one/<item_id>')
 def find_one_item(item_id: str):
-    stock = get_stock_by_id(item_id)
+    try:
+        stock = get_stock_by_id(item_id)
+    except StockNotFoundException as e:
+        return 'stock not found', 400
     return stock.dumps()
 
 
@@ -180,7 +187,10 @@ def find_item(item_id: str):
     :return: Stock
     """
     # get stock on this instance
-    stock = get_stock_by_id(item_id)
+    try:
+        stock = get_stock_by_id(item_id)
+    except StockNotFoundException as e:
+        return 'stock not found', 400
 
     # get stock on read_quorum -1 instance 
     candidates = get_quorum_samples(read_quorum)
@@ -224,7 +234,7 @@ def add_stock(item_id: str, amount: int):
     stock_update = StockUpdate(item_id = item_id, amount=amount, 
         node=hostname)
     stock = add_stock_to_db(item_id, amount, stock_update)
-
+    print('stock_update id '+ str(stock_update.update_id), file=sys.stderr)
     # write stock to quorum
     candidates = get_quorum_samples(read_quorum)
     for i in candidates:
@@ -236,7 +246,10 @@ def add_stock(item_id: str, amount: int):
 @app.post('/subtract_one/<item_id>/<amount>')
 def remove_stock_one(item_id: str, amount: int):
     amount = int(amount)
-    stock = get_stock_by_id(item_id)
+    try:
+        stock = get_stock_by_id(item_id)
+    except StockNotFoundException as e:
+        return 'stock not found', 400
     if stock.stock < amount:
         return "Not enough stock", 400
     stock = db.stock.find_one_and_update(
@@ -261,7 +274,10 @@ def remove_stock(item_id: str, amount: int):
     """
     amount = int(amount)
 
-    stock = get_stock_by_id(item_id)
+    try:
+        stock = get_stock_by_id(item_id)
+    except StockNotFoundException as e:
+        return 'stock not found', 400
     if stock.stock < amount:
         return "Not enough stock", 400
     
