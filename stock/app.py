@@ -103,11 +103,17 @@ def get_stock_update_log():
 
 
 def log_iterator():
-    for replica_url in replicas.values():
-        response = requests.get(f'{replica_url}/log')
-        if response != 200:
+    replica_copy = list(replicas.values())
+    for replica_url in replica_copy:
+        print(f'querying {replica_url}', file=sys.stderr)
+        try:
+            response = requests.get(f'{replica_url}/log')
+        except requests.exceptions.ConnectionError as e:
+            print(str(e), file=sys.stderr)
+            continue
+        if response.status_code != 200:
             continue # request did not turn ok so no log
-        yield response.json
+        yield response.json()
 
 
 def compare_logs(own_log, other_log):
@@ -118,7 +124,7 @@ def compare_logs(own_log, other_log):
     own_log_key_set = set(own_log.keys())
     other_log_key_set = set(other_log.keys())
     not_in_own_key_set = other_log_key_set - own_log_key_set
-    return {k:other_log_key_set[k] for k in not_in_own_key_set}
+    return {k:other_log[k] for k in not_in_own_key_set}
 
 
 def query_logs_and_update():
@@ -130,7 +136,8 @@ def query_logs_and_update():
 
 def update_stock_from_log(to_be_updated):
     for update_item in to_be_updated.values():
-        add_stock_to_db(update_item['item_id'], update_item['amount'], update_item)
+        su = StockUpdate.loads(update_item)
+        add_stock_to_db(su.item_id, su.amount, su)
 
 
 #setting up threaded event loop for log updates
@@ -143,7 +150,6 @@ class MyThread(Thread):
 
     async def _run(self):
         while True:
-            print("hallo from stock update thread", file=sys.stderr)
             await asyncio.sleep(1)
             query_logs_and_update()
 
@@ -153,8 +159,8 @@ t.start()
 
 # read quorum write quorum config
 # TODO consider different write_quorum for add stock and subtract stock
-read_quorum = 2 
-write_quorum = 2
+read_quorum = 1 
+write_quorum = 1
 
 
 def close_db_connection():

@@ -18,12 +18,12 @@ class TestReadQuorumWriteQuorum(unittest.TestCase):
         self.assertTrue(200 <= int(add_stock_response) < 300)
 
         # remove stock
-        remove_stock_response = tu.subtract_stock(item_id, 30)
+        #remove_stock_response = tu.subtract_stock(item_id, 30)
 
-        for i in range(2):
+        for i in range(3):
             item: dict = tu.find_item(item_id)
             self.assertTrue('item_id' in item)
-            self.assertEqual(item['stock'], 20)
+            self.assertEqual(item['stock'], 50)
 
 
 if __name__ == '__main__':
