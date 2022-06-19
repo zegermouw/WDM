@@ -3,6 +3,7 @@ from ipaddress import ip_address
 import os
 import sys
 import socket
+import uuid
 import requests
 import atexit
 import sys
@@ -115,9 +116,6 @@ def get_quorum_samples(quorum: int):
     return random.sample(list(replicas.keys()), min(len(replicas), quorum))
 
 
-def get_replica_address(index: int):
-    key = list(replicas.keys())[index]
-    return replicas[key]['address']
 
 def add_stock_to_db(item_id: str, amount: int, stock_update: StockUpdate) -> Stock:
     stock = db.stock.find_one_and_update(
@@ -228,15 +226,15 @@ def add_stock(item_id: str, amount: int):
     """
     # write stock update to db
     amount = int(amount)
-    stock_update = StockUpdate(item_id = item_id, amount=amount, local_time_stamp=datetime.now(), 
+    stock_update = StockUpdate(item_id = item_id, amount=amount, 
         node=hostname)
     stock = add_stock_to_db(item_id, amount, stock_update)
 
     # write stock to quorum
     candidates = get_quorum_samples(read_quorum)
     for i in candidates:
-        replica_address = get_replica_address(i)
-        response = request.post(f'{replica_address}/add_one/{item_id}/{amount}', json=stock_update.__dict__)
+        replica_address = replicas[i]
+        response = requests.post(f'{replica_address}/add_one/{item_id}/{amount}', json=stock_update.__dict__)
     return stock.dumps(), 200
 
 
