@@ -1,9 +1,10 @@
 import os
 import atexit
-from flask import Flask
+import sys
+
+from flask import Flask, request, Response, jsonify
 import redis
 from stock import Stock
-
 
 app = Flask("stock-service")
 
@@ -27,9 +28,10 @@ def create_item(price: int):
     :param price:
     :return: Stock
     """
-    s = Stock.new(int(price))
+    s = Stock.new(int(float(price)))
     db.set(s.item_id, s.dumps())
-    return s.dumps()
+
+    return jsonify(s)
 
 
 @app.get('/find/<item_id>')
@@ -39,7 +41,9 @@ def find_item(item_id: str):
     :param item_id:
     :return: Stock
     """
-    return db.get(item_id)
+    d = db.get(item_id)
+    s = Stock.loads(d)
+    return jsonify(s)
 
 
 @app.post('/add/<item_id>/<amount>')
@@ -52,12 +56,11 @@ def add_stock(item_id: str, amount: int):
     """
     d = db.get(item_id)
     s = Stock.loads(d)
-    s.stock += int(amount)
+    s.stock += int(float(amount))
     db.set(s.item_id, s.dumps())
-    return s.dumps()
+    return jsonify(s), 200
 
 
-@app.post('/subtract/<item_id>/<amount>')
 def remove_stock(item_id: str, amount: int):
     """
     Remove stock from item with given id.
@@ -65,11 +68,48 @@ def remove_stock(item_id: str, amount: int):
     :param amount: The amount to remove from the stock.
     :return: Stock item.
     """
-    amount = int(amount)
+    amount = int(float(amount))
     d = db.get(item_id)
     s = Stock.loads(d)
     if s.stock - amount < 0:
-        return "Not enough stock", 400
+        return False
     s.stock -= amount
     db.set(s.item_id, s.dumps())
-    return s.dumps()
+    return True
+
+
+def check_stock(item_id, amount) -> bool:
+    d = db.get(item_id)
+    s = Stock.loads(d)
+    return s.stock >= amount
+
+
+@app.post('/prepare_stock')
+def prepare_stock():
+    items = request.json
+    for item in items:
+        if not check_stock(item, items[item]):
+            return f'Not enough stock for item: {item}', 500
+
+    return 'Successfully prepared stock', 200
+
+
+@app.post('/commit_stock')
+def commit_stock():
+    items = request.json
+    for item in items:
+        if not remove_stock(item, items[item]):
+            return 'An item did not have enough stock, commit aborted', 500
+
+    return 'Successfully committed stock', 200
+
+
+@app.post('/rollback_stock')
+def rollback_stock():
+    items = request.json
+    for item in items:
+        status = add_stock(item, items[item])
+        if status[1] != 200:
+            return 'Something went wrong while rolling back stock', 500
+
+    return 'Rolled back Stock', 200

@@ -1,11 +1,11 @@
 import os
 import atexit
-from abc import ABC
+import sys
 
-from orderutils import subtract_stock, payment_pay, add_stock
+from orderutils import find_item, pay_order
 
 from pymongo import MongoClient
-from flask import Flask
+from flask import Flask, jsonify
 from bson.objectid import ObjectId
 
 from order import Order
@@ -18,7 +18,6 @@ client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
 
 
-
 def close_db_connection():
     db.close()
 
@@ -26,21 +25,21 @@ def close_db_connection():
 atexit.register(close_db_connection)
 
 
-# TODO: handle error handling for when mongodb fails.
-# TODO: Better handle mongodb response format.
-
 @app.post('/create/<user_id>')
 def create_order(user_id):
     order = Order(user_id=user_id)
     db.orders.insert_one(order.__dict__)
     order.order_id = str(order.__dict__.pop('_id'))  # Since order should have order_id instead of _id.
-    return order.dumps(), 200
+    return jsonify(order), 200
 
 
 @app.delete('/remove/<order_id>')
 def remove_order(order_id):
     status = db.orders.delete_one({"_id": ObjectId(order_id)})
-    return str(status), 200
+    if not status:
+        return 'The orderid is locked', 400
+    else:
+        return f'Removed item {order_id} successfully', 200
 
 
 @app.post('/addItem/<order_id>/<item_id>')
@@ -48,8 +47,11 @@ def add_item(order_id, item_id):
     j = db.orders.find_one({"_id": ObjectId(order_id)})
     order = Order.loads(j)
     order.items.append(item_id)
-    db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
-    return order.dumps(), 200
+    status = db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order.__dict__}, upsert=False)
+    if not status:
+        return 'The orderid is locked', 400
+    else:
+        return jsonify(order), 200
 
 
 @app.delete('/removeItem/<order_id>/<item_id>')
@@ -57,8 +59,11 @@ def remove_item(order_id, item_id):
     order = db.orders.find_one({"_id": ObjectId(order_id)})
     if item_id in order['items']:
         order['items'].remove(item_id)
-        db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order}, upsert=False)
-        return f'Removed item: {item_id}', 200
+        status = db.orders.update_one({"_id": ObjectId(order_id)}, {"$set": order}, upsert=False)
+        if not status:
+            return 'The orderid is locked', 400
+        else:
+            return f'Removed item: {item_id}', 200
     else:
         print('this does not exist')
         return f'Item {item_id} does not exist', 400
@@ -68,43 +73,31 @@ def remove_item(order_id, item_id):
 def find_order(order_id):
     order = db.orders.find_one({"_id": ObjectId(order_id)})
     order = Order.loads(order)
-    return order.dumps(), 200
+    return jsonify(order), 200
 
 
 @app.post('/checkout/<order_id>')
 def checkout(order_id):
-    """
-        Reserve stock from stock service and request payment from payment service
-            - if stock service has not enough stock for one item, rollback
-            - if pyment service fails payment: rollback items.
-    """
     order = db.orders.find_one({"_id": ObjectId(order_id)})
     order = Order.loads(order)
 
     total_checkout_amount: int = 0
-    reserved_items = []
     for item_id in order.items:
-        request = subtract_stock(item_id, 1)
-        if request.status_code == 400:
-            # One item has not enough stock, roll back other reserved items
-            rollback_items(reserved_items)
-            return "not enough stock", 400
-        item = request.json()
+        response = find_item(item_id)
+
+        if response.status_code != 200:
+            return response
+
+        item = response.json()
         total_checkout_amount += item['price']
-        reserved_items.append(item_id)
 
-    payment_status: int = payment_pay(order.user_id, order_id, total_checkout_amount)
-    if payment_status == 400:
-        rollback_items(reserved_items)
-        return "not enough mony", 400
+    items = {}
+    for item in order.items:
+        if item in items:
+            items[item] = items[item] + 1
+        else:
+            items[item] = 1
 
-    return order.dumps(), 200
+    status = pay_order(order.user_id, order_id, items, total_checkout_amount)
 
-
-def rollback_items(items):
-    for item_id in items:
-        add_stock(item_id, 1)
-
-@app.get('/hey')
-def hey():
-    return 'heyy', 200
+    return status.content, status.status_code
