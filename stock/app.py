@@ -1,6 +1,7 @@
 import os
 import sys
 import socket
+import threading
 import requests
 import atexit
 import sys
@@ -13,7 +14,10 @@ from pymongo import MongoClient, ReturnDocument
 from stock import Stock
 from stock_update import StockUpdate
 import kubernetes as k8s
-from threading import Thread
+import threading
+Thread = threading.Thread
+
+import asyncio
 
 
 #flask app
@@ -130,6 +134,24 @@ def update_stock_from_log(to_be_updated):
     for update_item in to_be_updated.values():
         add_stock_to_db(update_item['item_id'], update_item['amount'], update_item)
 
+
+#setting up threaded event loop for log updates
+class MyThread(Thread):
+    def run(self):
+        loop = asyncio.new_event_loop()  # loop = asyncio.get_event_loop()
+        loop.run_until_complete(self._run())
+        loop.close()
+        # asyncio.run(self._run())    In Python 3.7+
+
+    async def _run(self):
+        while True:
+            print("hallo from stock update thread", file=sys.stderr)
+            await asyncio.sleep(1)
+            query_logs_and_update()
+
+
+t = MyThread()
+t.start()
 
 # read quorum write quorum config
 # TODO consider different write_quorum for add stock and subtract stock
