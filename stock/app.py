@@ -1,9 +1,6 @@
-from datetime import datetime
-from ipaddress import ip_address
 import os
 import sys
 import socket
-import uuid
 import requests
 import atexit
 import sys
@@ -238,6 +235,21 @@ def add_stock(item_id: str, amount: int):
     return stock.dumps(), 200
 
 
+@app.post('/subtract_one/<item_id>/<amount>')
+def remove_stock_one(item_id: str, amount: int):
+    amount = int(amount)
+    stock = get_stock_by_id(item_id)
+    if stock.stock < amount:
+        return "Not enough stock", 400
+    stock = db.stock.find_one_and_update(
+        {'_id': ObjectId(str(item_id))},
+        {'$inc': {'stock': -amount}},
+        return_document=ReturnDocument.AFTER
+    )
+    stock = Stock.loads(stock)
+    return stock.dumps(), 200 
+
+@app.post('/subtract/<item_id>/<amount>')
 def remove_stock(item_id: str, amount: int):
     """
     Remove stock from item with given id.
@@ -250,9 +262,28 @@ def remove_stock(item_id: str, amount: int):
     :return: Stock item.
     """
     amount = int(amount)
+
     stock = get_stock_by_id(item_id)
     if stock.stock < amount:
         return "Not enough stock", 400
+    
+    candidates = get_quorum_samples(read_quorum)
+    succeeded_candidate_urls = []
+    failed = False
+    for c in candidates:
+        replication_address = replicas[c]
+        response = requests.post(f'{replication_address}/{item_id}/{amount}')
+        if response.status_code == 200:
+            succeeded_candidate_urls.append(replication_address)
+        elif response.status_code == 400:
+            failed = True
+            break
+        succeeded_candidate_urls.append(replication_address)
+    
+    if failed:
+        for replication_address in succeeded_candidate_urls:
+            request.post(f'{replication_address}/add_one/{item_id}/{amount}')
+
     stock = db.stock.find_one_and_update(
         {'_id': ObjectId(str(item_id))},
         {'$inc': {'stock': -amount}},
