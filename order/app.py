@@ -126,7 +126,6 @@ def find_order(order_id):
 
 @app.post('/checkout/<order_id>')
 def checkout(order_id):
-    order = db.orders.find_one({"_id": ObjectId(order_id)})
     """
         Reserve stock from stock service and request payment from payment service
             - if stock service has not enough stock for one item, rollback
@@ -153,5 +152,6 @@ def checkout(order_id):
             items[item] = 1
 
     status = pay_order(order.user_id, order_id, items, total_checkout_amount)
-
+    print("status", file=sys.stderr)
+    print(str(status), file=sys.stderr)
     return status.content, status.status_code

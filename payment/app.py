@@ -1,5 +1,6 @@
 import atexit
 import os
+import sys
 from enum import Enum
 
 from flask import Flask, jsonify, request, logging
@@ -18,6 +19,7 @@ from paxos import Paxos
 app = Flask("payment-service")
 
 myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
+print(str(myclient["local"]), file=sys.stderr)
 db = myclient["local"]
 payment_replicas: list[str] = [os.environ['OTHER_NODE']]
 port = '5000'

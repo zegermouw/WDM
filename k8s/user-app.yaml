@@ -28,19 +28,25 @@ spec:
       containers:
         - name: payment
           image: zegermouw/payment:latest
-          resources:
-            limits:
-              memory: "1Gi"
-              cpu: "1"
-            requests:
-              memory: "1Gi"
-              cpu: "1"
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app"]
           ports:
             - containerPort: 5000
           env:
-            - name: PAYMENT_GATEWAY
-              value: "mongodb://payment-db:27017/db"
-            - name: PAYMENT_PORT
-              value: "27017"
+            - name: GATEWAY_URL
+              value: "mongodb://localhost:27018/db"
+            - name: PORT
+              value: "27018"
+            - name: OTHER_NODE
+              value: "http://payment-service"
+            - name: REPLICATION_NUMBER
+              value: "1"
+        - name: payment-db
+          args:
+            - mongod
+            - --port
+            - "27018"
+          image: mongo
+          ports:
+            - containerPort: 27018
+
