@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-db-service
+spec:
+  type: ClusterIP
+  selector:
+    component: order-db
+  ports:
+    - port: 27018
+      name: http-27018
+      targetPort: 27018
+    - port: 27019
+      name: http-27019
+      targetPort: 27019
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: order-db
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        component: order-db
+    spec:
+      containers:
+
+        - args:
+            - mongod
+            - --port
+            - "27019"
+            image: mongo
+            name: order-db
+            ports:
+              - containerPort: 27019

@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: order-service
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     component: order
   ports:
@@ -16,7 +16,7 @@ kind: Deployment
 metadata:
   name: order-deployment
 spec:
-  replicas: 1
+  replicas: 4
   selector:
     matchLabels:
       component: order
@@ -27,28 +27,29 @@ spec:
     spec:
       containers:
         - name: order
-          image: order:latest
-          resources:
-            limits:
-              memory: "1Gi"
-              cpu: "1"
-            requests:
-              memory: "1Gi"
-              cpu: "1"
+          image: zegermouw/order:latest
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app"]
           ports:
             - containerPort: 5000
           env:
-            - name: USER_SERVICE_URL
-              value: "user-service"
+            - name: PAYMENT_SERVICE_URL
+              value: "payment-service"
             - name: STOCK_SERVICE_URL
               value: "stock-service"
-            - name: REDIS_HOST
-              value: redis-master
-            - name: REDIS_PORT
-              value: '6379'
-            - name: REDIS_PASSWORD
-              value: "redis"
-            - name: REDIS_DB
-              value: "0"
+            - name: GATEWAY_URL
+              value: "mongodb://localhost:27018/db"
+            - name: PORT
+              value: "27018"
+        - name: order-db
+          args:
+            - mongod
+            - --port
+            - "27018"
+          image: mongo
+          ports:
+            - containerPort: 27018
+
+
+
+

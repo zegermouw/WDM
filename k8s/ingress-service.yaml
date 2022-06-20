@@ -9,6 +9,13 @@ spec:
  rules:
    - http:
       paths:
+        - path: /orders-shard/?(.*)
+          pathType: Prefix
+          backend:
+            service:
+              name: order-sharding-service
+              port:
+                number: 5000
         - path: /orders/?(.*)
           pathType: Prefix
           backend:
@@ -27,6 +34,6 @@ spec:
           pathType: Prefix
           backend:
             service:
-              name: user-service
+              name: payment-service
               port:
                 number: 5000

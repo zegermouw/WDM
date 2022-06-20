@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: stock-service
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     component: stock
   ports:
@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: stock
-          image: stock:latest
+          image: mwschutte/stock:latest
           resources:
             limits:
               memory: "1Gi"
@@ -36,15 +36,19 @@ spec:
               memory: "1Gi"
               cpu: "1"
           command: ["gunicorn"]
-          args: ["-b", "0.0.0.0:5000", "app:app"]
+          args: ["-b", "0.0.0.0:5000", "app:app", --threads 3, --worker-class=gevent, --worker-connections=1000]
           ports:
             - containerPort: 5000
           env:
-            - name: REDIS_HOST
-              value: redis-master
-            - name: REDIS_PORT
-              value: '6379'
-            - name: REDIS_PASSWORD
-              value: "redis"
-            - name: REDIS_DB
-              value: "0"
+            - name: GATEWAY_URL
+              value: "mongodb://localhost:27018/db"
+            - name: PORT
+              value: "27018"
+        - name: stock-db
+          args:
+            - mongod
+            - --port
+            - "27018"
+          image: mongo
+          ports:
+            - containerPort: 27018

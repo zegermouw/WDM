@@ -1,6 +1,6 @@
 Flask==2.1.1
-redis==4.2.2
 gunicorn==20.1.0
-pymongo
+pymongo==4.1.1
 json_util
 requests==2.27.1
+kubernetes
