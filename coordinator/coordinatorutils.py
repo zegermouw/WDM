@@ -3,30 +3,33 @@ import json
 from requests import Response
 
 ORDER_URL = STOCK_URL = PAYMENT_URL = "http://host.docker.internal:8000"
-
+ORDER_SERVICE = "http://order-service:5000"
+COORDINATOR_SERVICE = "http://coordinator-service:5000"
+STOCK_SERVICE = "http://stock-service:5000"
+PAYMENT_SERVICE = "http://payment-service:5000"
 
 def prepare_pay(user_id: str, price: float) -> Response:
-    return requests.post(f"{PAYMENT_URL}/payment/prepare_pay/{user_id}/{price}")
+    return requests.post(f"{PAYMENT_SERVICE}/prepare_pay/{user_id}/{price}")
 
 
 def rollback_pay(user_id: str, price: float) -> int:
-    return requests.post(f"{PAYMENT_URL}/payment/rollback_pay/{user_id}/{price}").status_code
+    return requests.post(f"{PAYMENT_SERVICE}/rollback_pay/{user_id}/{price}").status_code
 
 
 def commit_pay(user_id: str, order_id: str, price: float) -> int:
-    return requests.post(f"{PAYMENT_URL}/payment/commit_pay/{user_id}/{order_id}/{price}").status_code
+    return requests.post(f"{PAYMENT_SERVICE}/commit_pay/{user_id}/{order_id}/{price}").status_code
 
 
 def prepare_stock(item_ids: [str]) -> Response:
-    return requests.post(f"{PAYMENT_URL}/stock/prepare_stock", json=item_ids)
+    return requests.post(f"{STOCK_SERVICE}/prepare_stock", json=item_ids)
 
 
 def commit_stock(item_ids: [str]) -> int:
-    return requests.post(f"{PAYMENT_URL}/stock/commit_stock", json=item_ids).status_code
+    return requests.post(f"{STOCK_SERVICE}/commit_stock", json=item_ids).status_code
 
 
 def rollback_stock(item_ids: [str]) -> int:
-    return requests.post(f"{PAYMENT_URL}/stock/rollback_stock", json=item_ids).status_code
+    return requests.post(f"{STOCK_SERVICE}/rollback_stock", json=item_ids).status_code
 
 
 def read_locking_doc():
