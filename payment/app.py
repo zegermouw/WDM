@@ -5,28 +5,115 @@ from enum import Enum
 
 from flask import Flask, jsonify, request, logging
 
-import json
+import sys
 import requests
-from bson import json_util
 import pymongo
 from pymongo import ReturnDocument
 from bson.objectid import ObjectId
+from bson.json_util import dumps
 import uuid
 
 from models import User
 from paxos import Paxos
+import kubernetes as k8s
+import threading
+import random
+Thread = threading.Thread
+import socket
+
+
 
 app = Flask("payment-service")
 
+
+
+# pod events:
+DELETED = "DELETED"
+ADDED = 'ADDED'
+MODIFIED = 'MODIFIED' 
+
+
+# get replica pods using kubernets api
+k8s.config.load_incluster_config()
+v1 = k8s.client.CoreV1Api()
+hostname=socket.gethostname()
+IPAddr=socket.gethostbyname(hostname)
+print(hostname, file=sys.stderr)
+print("running on: " + IPAddr, file=sys.stderr)
+
+
+def threaded_task():
+    """
+    Threaded task listens to k8s api event and loads all replicas
+    """
+    print('Setting up k8s api event listener', file=sys.stderr)
+    w = k8s.watch.Watch()
+    for event in w.stream(v1.list_pod_for_all_namespaces, timeout_seconds=10):
+        pod = event['object']
+        print("Event: %s %s %s" % (
+            event['type'],
+            event['object'].kind,
+            event['object'].metadata.name)
+        ,file=sys.stderr)
+        if 'payment-deployment' in pod.metadata.name:
+            # if there is a new stock-deployment event, refetch al active stock ip
+            get_pods()
+            if event['type'] == DELETED:
+                if pod.metadata.name in replicas:
+                    replicas.pop(pod.metadata.name)
+
+
+# tread to listen to k8s api
+thread = Thread(target=threaded_task)
+thread.daemon = True
+thread.start()
+
+
 myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
-payment_replicas: list[str] = [os.environ['OTHER_NODE']]
-port = '5000'
-for i in range(len(payment_replicas)):
-    s = payment_replicas[i]
-    payment_replicas[i] = s + ':' + port
+replicas = {}
+payment_replicas: list[str] = []
+replication_number = random.randint(0,100) #use random integer as unique replication id number 
+paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
+def get_pods():
+    """
+    Gets replica ip addresses and stores them im replicas set
+    TODO add extra check after timeout to check if its still alive since shuting down can take some time. (try something like javascript timeout)
+    """
+    global replicas
+    global payment_replicas
+    replicas = {}
+    pod_list = v1.list_pod_for_all_namespaces(watch=False)
+    for pod in pod_list.items:
+        if(pod.metadata.name != hostname and "payment-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
+            url = f'http://{pod.status.pod_ip}:5000'
+            try:
+                response = requests.get(f'{url}/alive/{hostname}/{IPAddr}')
+                if response.status_code == 200:
+                    replicas[pod.metadata.name] = url 
+            except requests.exceptions.ConnectionError as e:
+                if pod.metadata.name in replicas:
+                    replicas.pop(pod.metadata.name)
+                print(e, file=sys.stderr)
+    print('replicas:'+str(replicas), file=sys.stderr)
+    payment_replicas = list(replicas.values())
+    paxos.replicas = payment_replicas
 
-replication_number = int(os.environ['REPLICATION_NUMBER'])
+
+
+
+# for testing purposes
+@app.get('/pods')
+def config_pods():
+    return dumps(replicas)
+
+
+@app.get('/alive/<hostname>/<ip_address>')
+def im_alive(hostname: str, ip_address: str):
+    replicas[hostname] = f'http://{ip_address}:5000'
+    return 'ok', 200
+
+
 
 
 def close_db_connection():
@@ -34,8 +121,6 @@ def close_db_connection():
 
 
 atexit.register(close_db_connection)
-base_url = "http://host.docker.internal"
-paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
 
 
 # region MODEL
@@ -94,7 +179,7 @@ def find_user(user_id: str):
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: float):
     # TODO restrict number of retries for Paxos.NOT_ACCEPTED
-    app.logger.info("times: %s, requesting add funds with amount %s, and user_id %s", i, amount, user_id)
+    app.logger.info(" requesting add funds with amount %s, and user_id %s", amount, user_id)
     amount = float(amount)
     print("1", file=sys.stderr)
     user = find_user_by_id(user_id)
