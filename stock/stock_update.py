@@ -21,5 +21,5 @@ class StockUpdate:
         return StockUpdate(**input_json)
     
     def load_id(self):
-        if 'update_id' in self.__dict__:
+        if '_id' in self.__dict__:
             self.update_id = str(self.__dict__.pop('_id'))

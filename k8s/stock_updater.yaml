@@ -36,4 +36,5 @@ spec:
             requests:
               memory: "1Gi"
               cpu: "1"
-          command: ["python app.py"]
+          command: ["gunicorn"]
+          args: ["-b", "0.0.0.0:5000", "app:app", --threads 2]

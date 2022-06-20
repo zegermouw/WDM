@@ -17,3 +17,7 @@ class Stock:
         if '_id' in input_json:
             input_json['item_id'] = str(input_json.pop('_id'))
         return Stock(**input_json)
+
+    def load_id(self):
+        if '_id' in self.__dict__:
+            self.item_id = str(self.__dict__.pop('_id'))

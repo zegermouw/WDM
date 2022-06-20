@@ -5,7 +5,7 @@ import threading
 import requests
 import atexit
 from bson import ObjectId
-from flask import Flask, request, jsonify
+from flask import Flask, request 
 from pymongo import MongoClient, ReturnDocument
 from stock import Stock
 import random
@@ -162,12 +162,15 @@ def add_stock_to_db(stock_update: StockUpdate) -> Stock:
     )
     if stock == None:
         # stock did not exist: insert stock
-        item = Stock.loads(item_id=stock_update.item_id, amount=stock_update.amount, price=stock_update.price)
-        db.stock.insert_one({'_id': ObjectId(item.item_id), **item.__dict__})
+        stock = Stock.loads(item_id=stock_update.item_id, amount=stock_update.amount, price=stock_update.price)
+        db.stock.insert_one({'_id': ObjectId(stock.item_id), **stock.__dict__})
+        stock.load_id()
+    else:
+        stock = Stock.loads(stock)
     stock_update.price = stock.price
     db.stock_updates.insert_one(stock_update.__dict__)
     stock_update.load_id()
-    return Stock.loads(stock)
+    return stock 
 
 
 @app.get('/alive/<hostname>/<ip_address>')

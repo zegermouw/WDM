@@ -1,13 +1,18 @@
-import os
+
+import asyncio
+
 import sys
 import socket
 import threading
 import requests
+from flask import Flask 
 import kubernetes as k8s
 import threading
 Thread = threading.Thread
 
-import asyncio
+
+
+app = Flask("stockupdate-service")
 
 
 print('hallo world', file=sys.stderr)
@@ -23,33 +28,27 @@ print("running on: " + IPAddr, file=sys.stderr)
 
 
 
-replicas = {}
 def get_pods():
     """
     Gets replica ip addresses and stores them im replicas set
     TODO add extra check after timeout to check if its still alive since shuting down can take some time. (try something like javascript timeout)
     """
-    global replicas
     replicas = {}
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
     for pod in pod_list.items:
         if(pod.metadata.name != hostname and "stock-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
             url = f'http://{pod.status.pod_ip}:5000'
-            print(e, file=sys.stderr)
-
+            replicas[pod.metadata.name] = url
+    return replicas
 
 # update service with other logs
 
 
-merged_log = {}
 
-def log_iterator():
-    global merge_log
-    replica_copy = list(replicas.values())
-    for replica_url in replica_copy:
-        print(f'querying {replica_url}', file=sys.stderr)
+def log_iterator(pods, log):
+    for replica_url in pods.values():
         try:
-            response = requests.get(f'{replica_url}/log', json=merge_log)
+            response = requests.get(f'{replica_url}/log', json=log)
         except requests.exceptions.ConnectionError as e:
             print(str(e), file=sys.stderr)
             continue
@@ -59,24 +58,34 @@ def log_iterator():
 
 
 
-def query_logs_and_update():
-    get_pods()
-    for other_log in log_iterator():
-        merge_log(other_log)
+def query_logs_and_update(log):
+    pods = get_pods()
+    for other_log in log_iterator(pods, log):
+        log = merge_log(log, other_log)
+    return log
+
+def merge_log(log1, log2):
+    for k,v in log2.items():
+        log1[k] = v
+    return log1
 
 
-def merge_log(log):
-    for k,v in log.items():
-        merge_log[k] = v
 
 
-async def myWork():
-    print("Starting Work", file=sys.stderr)
-    query_logs_and_update()
-    await asyncio.sleep(1)
+class MyThread(Thread):
+    def run(self):
+        loop = asyncio.new_event_loop()  # loop = asyncio.get_event_loop()
+        loop.run_until_complete(self._run())
+        loop.close()
+        # asyncio.run(self._run())    In Python 3.7+
 
-loop = asyncio.get_event_loop()
-try:
-    loop.run_until_complete(myWork())
-finally:
-    loop.close()
+    async def _run(self):
+        log = {}
+        print("querying stock logs started", file=sys.stderr)
+        while True:
+            await asyncio.sleep(1)
+            log = query_logs_and_update(log)
+
+
+t = MyThread()
+t.start()
