@@ -8,6 +8,7 @@ class StockUpdate:
     item_id: str
     amount: float
     node: str
+    price: float = None
     update_id: str = None
     
     def dumps(self):

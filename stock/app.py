@@ -15,7 +15,6 @@ import kubernetes as k8s
 import threading
 Thread = threading.Thread
 
-import asyncio
 
 
 #flask app
@@ -102,20 +101,6 @@ def get_stock_update_log():
     return res
 
 
-def log_iterator():
-    replica_copy = list(replicas.values())
-    for replica_url in replica_copy:
-        print(f'querying {replica_url}', file=sys.stderr)
-        try:
-            response = requests.get(f'{replica_url}/log')
-        except requests.exceptions.ConnectionError as e:
-            print(str(e), file=sys.stderr)
-            continue
-        if response.status_code != 200:
-            continue # request did not turn ok so no log
-        yield response.json()
-
-
 def compare_logs(own_log, other_log):
     """
         compares own_log with other_log and returns the transactions that did
@@ -127,39 +112,22 @@ def compare_logs(own_log, other_log):
     return {k:other_log[k] for k in not_in_own_key_set}
 
 
-def query_logs_and_update():
-    for other_log in log_iterator():
+def update_log(central_log):
         own_log = get_stock_update_log()
-        not_in_own_log = compare_logs(own_log, other_log)
+        not_in_own_log = compare_logs(own_log, central_log)
         update_stock_from_log(not_in_own_log)
 
 
 def update_stock_from_log(to_be_updated):
     for update_item in to_be_updated.values():
         su = StockUpdate.loads(update_item)
-        add_stock_to_db(su.item_id, su.amount, su)
+        add_stock_to_db(su)
 
 
-#setting up threaded event loop for log updates
-class MyThread(Thread):
-    def run(self):
-        loop = asyncio.new_event_loop()  # loop = asyncio.get_event_loop()
-        loop.run_until_complete(self._run())
-        loop.close()
-        # asyncio.run(self._run())    In Python 3.7+
-
-    async def _run(self):
-        while True:
-            await asyncio.sleep(1)
-            query_logs_and_update()
-
-
-t = MyThread()
-t.start()
 
 # read quorum write quorum config
 # TODO consider different write_quorum for add stock and subtract stock
-read_quorum = 1 
+read_quorum = 1
 write_quorum = 1
 
 
@@ -186,12 +154,17 @@ def get_quorum_samples(quorum: int):
 
 
 
-def add_stock_to_db(item_id: str, amount: int, stock_update: StockUpdate) -> Stock:
+def add_stock_to_db(stock_update: StockUpdate) -> Stock:
     stock = db.stock.find_one_and_update(
-        {'_id': ObjectId(str(item_id))},
-        {'$inc': {'stock': amount}},
+        {'_id': ObjectId(str(stock_update.item_id))},
+        {'$inc': {'stock': stock_update.amount}},
         return_document=ReturnDocument.AFTER
     )
+    if stock == None:
+        # stock did not exist: insert stock
+        item = Stock.loads(item_id=stock_update.item_id, amount=stock_update.amount, price=stock_update.price)
+        db.stock.insert_one({'_id': ObjectId(item.item_id), **item.__dict__})
+    stock_update.price = stock.price
     db.stock_updates.insert_one(stock_update.__dict__)
     stock_update.load_id()
     return Stock.loads(stock)
@@ -285,9 +258,8 @@ def add_amount_to_one(item_id: str, amount: int):
     """
     Add amount to only one node
     """
-    amount = int(amount)
     stock_update = StockUpdate.loads(request.json)
-    stock = add_stock_to_db(item_id, amount, stock_update)
+    stock = add_stock_to_db(stock_update)
     return stock.dumps(), 200
 
 
@@ -303,7 +275,7 @@ def add_stock(item_id: str, amount: int):
     amount = int(amount)
     stock_update = StockUpdate(item_id = item_id, amount=amount, 
         node=hostname)
-    stock = add_stock_to_db(item_id, amount, stock_update)
+    stock = add_stock_to_db(stock_update)
     print('stock_update id '+ str(stock_update.update_id), file=sys.stderr)
     # write stock to quorum
     candidates = get_quorum_samples(read_quorum)
@@ -380,4 +352,8 @@ def remove_stock(item_id: str, amount: int):
 @app.get('/log')
 def get_stock_update_log_response():
     stock_update_log = get_stock_update_log()
+    # todo make this async such that call return without updating own log first might be faster
+    logs =  request.json
+    if logs != None:
+        update_log(logs)    
     return dumps(stock_update_log), 200
