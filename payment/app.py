@@ -158,7 +158,10 @@ def create_user():
     user_id = db.users.insert_one(user.__dict__).inserted_id
     user.set_id()
     for replica in payment_replicas:
-        requests.put(replica + '/create_user', json=user.__dict__)
+        try:
+            requests.put(f'{replica}/create_user', json=user.__dict__)
+        except requests.exceptions.ConnectionError as e:
+            print(e, file=sys.stderr)
     return jsonify({'user_id': str(user_id)}), 200
 
 
