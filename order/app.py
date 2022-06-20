@@ -18,17 +18,17 @@ gateway_url = os.environ['GATEWAY_URL']
 
 app = Flask("order-service")
 
-
 client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
 
-hostname=socket.gethostname()
-IPAddr=socket.gethostbyname(hostname)
+hostname = socket.gethostname()
+IPAddr = socket.gethostbyname(hostname)
 print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
 
 k8s.config.load_incluster_config()
 v1 = k8s.client.CoreV1Api()
+
 
 def pingSharding():
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
@@ -37,6 +37,8 @@ def pingSharding():
 
 
 pingSharding()
+
+
 # vector_clock = 0
 # vector_list = []
 #
@@ -44,6 +46,7 @@ pingSharding()
 
 def close_db_connection():
     db.close()
+
 
 atexit.register(close_db_connection)
 
@@ -56,12 +59,14 @@ def test_get2():
     print("got message from: " + flask_request.remote_addr, file=sys.stderr)
     return "test", 200
 
+
 @app.get('/')
 def test_get():
     print("---------------------------------", file=sys.stderr)
     # this.vector_list = get_pods()
     print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<", file=sys.stderr)
     return "joee", 200
+
 
 @app.post('/create/<user_id>/<order_id>')
 def create_order(user_id, order_id):
@@ -95,6 +100,7 @@ def add_item(order_id, item_id):
     else:
         return jsonify(order), 200
 
+
 @app.delete('/removeItem/<order_id>/<item_id>')
 def remove_item(order_id, item_id):
     print("removeItem(order: " + str(order_id) + ", item: " + str(item_id) + ")", file=sys.stderr)
@@ -110,11 +116,13 @@ def remove_item(order_id, item_id):
         print('this does not exist')
         return f'Item {item_id} does not exist', 400
 
+
 @app.get('/all/<order_id>')
 def all(order_id):
     print("all", file=sys.stderr)
     orders = list(db.orders.find({}))
     return str(orders), 200
+
 
 @app.get('/find/<order_id>')
 def find_order(order_id):
