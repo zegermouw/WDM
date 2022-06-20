@@ -19,7 +19,6 @@ from paxos import Paxos
 app = Flask("payment-service")
 
 myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
-print(str(myclient["local"]), file=sys.stderr)
 db = myclient["local"]
 payment_replicas: list[str] = [os.environ['OTHER_NODE']]
 port = '5000'
@@ -74,8 +73,8 @@ def create_user():
     user = User()
     user_id = db.users.insert_one(user.__dict__).inserted_id
     user.set_id()
-    for replica in payment_replicas:
-        requests.put(replica + '/create_user', json=user.__dict__)
+    # for replica in payment_replicas:
+    #     requests.put(replica + '/create_user', json=user.__dict__)
     return jsonify({'user_id': str(user_id)}), 200
 
 
@@ -97,11 +96,17 @@ def add_credit(user_id: str, amount: float):
     # TODO restrict number of retries for Paxos.NOT_ACCEPTED
     app.logger.info("times: %s, requesting add funds with amount %s, and user_id %s", i, amount, user_id)
     amount = float(amount)
+    print("1", file=sys.stderr)
     user = find_user_by_id(user_id)
     user['credit'] += amount
+    print("2", file=sys.stderr)
     transaction_id = str(uuid.uuid4())
     user['transaction_id'] = transaction_id
+    # TODO remove this until next comment
+    return "TEST", 200
+    # THIS
     response, accepted_user = paxos.proposer_prepare(user)
+    print("3", file=sys.stderr)
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
         return add_credit(user_id, amount)
