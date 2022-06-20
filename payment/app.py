@@ -1,6 +1,5 @@
 import atexit
 import os
-import sys
 from enum import Enum
 
 from flask import Flask, jsonify, request, logging
@@ -30,7 +29,7 @@ app = Flask("payment-service")
 # pod events:
 DELETED = "DELETED"
 ADDED = 'ADDED'
-MODIFIED = 'MODIFIED'
+MODIFIED = 'MODIFIED' 
 
 
 # get replica pods using kubernets api
@@ -73,7 +72,7 @@ myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']
 db = myclient["local"]
 replicas = {}
 payment_replicas: list[str] = []
-replication_number = random.randint(0,100) #use random integer as unique replication id number
+replication_number = random.randint(0,100) #use random integer as unique replication id number 
 paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
 def get_pods():
     """
@@ -90,7 +89,7 @@ def get_pods():
             try:
                 response = requests.get(f'{url}/alive/{hostname}/{IPAddr}')
                 if response.status_code == 200:
-                    replicas[pod.metadata.name] = url
+                    replicas[pod.metadata.name] = url 
             except requests.exceptions.ConnectionError as e:
                 if pod.metadata.name in replicas:
                     replicas.pop(pod.metadata.name)
@@ -158,10 +157,11 @@ def create_user():
     user = User()
     user_id = db.users.insert_one(user.__dict__).inserted_id
     user.set_id()
-    print("hier", file=sys.stderr)
     for replica in payment_replicas:
-        print(str(replica) + "/create_user", file=sys.stderr)
-        requests.put(replica + '/create_user', json=user.__dict__)
+        try:
+            requests.put(f'{replica}/create_user', json=user.__dict__)
+        except requests.exceptions.ConnectionError as e:
+            print(e, file=sys.stderr)
     return jsonify({'user_id': str(user_id)}), 200
 
 
@@ -183,14 +183,11 @@ def add_credit(user_id: str, amount: float):
     # TODO restrict number of retries for Paxos.NOT_ACCEPTED
     app.logger.info(" requesting add funds with amount %s, and user_id %s", amount, user_id)
     amount = float(amount)
-    print("1", file=sys.stderr)
     user = find_user_by_id(user_id)
     user['credit'] += amount
-    print("2", file=sys.stderr)
     transaction_id = str(uuid.uuid4())
     user['transaction_id'] = transaction_id
     response, accepted_user = paxos.proposer_prepare(user)
-    print("3", file=sys.stderr)
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
         return add_credit(user_id, amount)
