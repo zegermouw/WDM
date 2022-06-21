@@ -10,7 +10,6 @@ from pymongo import MongoClient, ReturnDocument
 import sys
 
 from flask import Flask, request, Response, jsonify
-import redis
 from stock import Stock
 import random
 from stock_update import StockUpdate
@@ -228,7 +227,7 @@ def find_one_item(item_id: str):
     return stock.dumps()
 
 
-@app.get('/find/<item_id>')
+
 def find_item(item_id: str):
     """
     Get item if it exists.
@@ -257,7 +256,14 @@ def find_item(item_id: str):
         if replica.stock < stock.stock:
             stock.stock = replica.stock
 
-    return stock.dumps(), 200
+    return stock, 200
+
+@app.get('/find/<item_id>')
+def find_item_response(item_id):
+    stock, status = find_item(item_id=item_id)
+    if status == 200:
+        return stock.dumps()
+    return stock, status
 
 
 @app.post('/add_one/<item_id>/<amount>')
@@ -363,3 +369,41 @@ def get_stock_update_log_response():
     if logs != None and len(logs)>0:
         update_log(logs)    
     return dumps(stock_update_log), 200
+
+
+def check_stock(item_id, amount) -> bool:
+    s, response = find_item(item_id)
+    if response == 200:
+        return s.stock >= amount
+    return False
+
+
+@app.post('/prepare_stock')
+def prepare_stock():
+    items = request.json
+    for item in items:
+        if not check_stock(item, items[item]):
+            return f'Not enough stock for item: {item}', 400
+
+    return 'Successfully prepared stock', 200
+
+
+@app.post('/commit_stock')
+def commit_stock():
+    items = request.json
+    for item in items:
+        if not remove_stock(item, items[item]):
+            return 'An item did not have enough stock, commit aborted', 400
+
+    return 'Successfully committed stock', 200
+
+
+@app.post('/rollback_stock')
+def rollback_stock():
+    items = request.json
+    for item in items:
+        status = add_stock(item, items[item])
+        if status[1] != 200:
+            return 'Something went wrong while rolling back stock', 400
+
+    return 'Rolled back Stock', 200
