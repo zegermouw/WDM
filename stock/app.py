@@ -182,7 +182,8 @@ def create_item(price: int):
     :return: Stock
     """
     # create and save the new stock item
-    stock = Stock(price=int(price))
+    price = int(price)
+    stock = Stock(price=price)
     db.stock.insert_one(stock.__dict__)
     stock.item_id = str(stock.__dict__.pop('_id'))
     stock_update = StockUpdate(item_id=stock.item_id, amount=0, node=hostname, price=price )
@@ -293,18 +294,11 @@ def add_stock(item_id: str, amount: int):
 @app.post('/subtract_one/<item_id>/<amount>')
 def remove_stock_one(item_id: str, amount: int):
     amount = int(amount)
-    try:
-        stock = get_stock_by_id(item_id)
-    except StockNotFoundException as e:
-        return 'stock not found', 400
-    if stock.stock < amount:
-        return "Not enough stock", 400
-    stock = db.stock.find_one_and_update(
-        {'_id': ObjectId(str(item_id))},
-        {'$inc': {'stock': -amount}},
-        return_document=ReturnDocument.AFTER
-    )
-    stock = Stock.loads(stock)
+    stock_update = StockUpdate.loads(request.json)
+    stock, stock_update = add_stock_to_db(stock_update)
+    if stock.stock < 0:
+        return 'not enough stock', 400
+    
     return stock.dumps(), 200 
 
 @app.post('/subtract/<item_id>/<amount>')
@@ -328,11 +322,21 @@ def remove_stock(item_id: str, amount: int):
     if stock.stock < amount:
         return "Not enough stock", 400
     
+    stock_update = StockUpdate(item_id=item_id, amount=-amount, node=hostname, price=-amount)
+    item, stock_update = add_stock_to_db(stock_update)
+
+    if item.stock < 0:
+        # revert update
+        stock_update = StockUpdate(item_id=item_id, amount=amount, node=hostname)
+        item, stock_update = add_stock_to_db(stock_update)
+        return "not enough stock", 400
+
+    
     candidates = get_quorum_samples_addresses(read_quorum)
     succeeded_candidate_urls = []
     failed = False
     for replication_address in candidates:
-        response = requests.post(f'{replication_address}/{item_id}/{amount}')
+        response = requests.post(f'{replication_address}/subtract_one/{item_id}/{amount}', json=stock_update.__dict__)
         if response.status_code == 200:
             succeeded_candidate_urls.append(replication_address)
         elif response.status_code == 400:
@@ -341,16 +345,14 @@ def remove_stock(item_id: str, amount: int):
         succeeded_candidate_urls.append(replication_address)
     
     if failed:
+        # if one failed write back the stock.
+        stock_update = StockUpdate(item_id=item_id, amount=amount, node=hostname)
+        item, stock_update = add_stock_to_db(stock_update)
         for replication_address in succeeded_candidate_urls:
-            requests.post(f'{replication_address}/add_one/{item_id}/{amount}')
+            requests.post(f'{replication_address}/add_one/{item_id}/{amount}', json=stock_update)
+        return "not enough stock", 400
 
-    stock = db.stock.find_one_and_update(
-        {'_id': ObjectId(str(item_id))},
-        {'$inc': {'stock': -amount}},
-        return_document=ReturnDocument.AFTER
-    )
-    stock = Stock.loads(stock)
-    return stock.dumps(), 200 
+    return item.dumps(), 200 
 
 
 @app.post('/log')
