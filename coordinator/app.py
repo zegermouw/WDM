@@ -30,7 +30,7 @@ def pay_order(user_id, order_id, price):
 
         if status_stock == 200 and status_pay == 200:
             unlock(user_id, item_ids)
-            return 'order is payed', 200
+            return 'order is paid', 200
         else:
             if status_pay == 200 and status_stock != 200:
                 unlock(user_id, item_ids)

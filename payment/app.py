@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request, logging
 import sys
 import requests
 import pymongo
+import datetime
 from pymongo import ReturnDocument
 from bson.objectid import ObjectId
 from bson.json_util import dumps
@@ -55,6 +56,8 @@ def get_pods():
     TODO add extra check after timeout to check if its still alive since shuting down can take some time. (try something like javascript timeout)
     """
     global replicas
+    global payment_replicas
+    global paxos
     new_replicas = {}
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
     for pod in pod_list.items:
@@ -65,6 +68,11 @@ def get_pods():
     payment_replicas = list(replicas.values())
     if sorted(paxos.replicas) != sorted(payment_replicas):
         paxos.replicas = payment_replicas
+    
+    ### PRINT THE COUNT AND IPs OF PODS
+    # print(f'pods found count: {len(paxos.replicas)}', file=sys.stderr)
+    # for i,r in enumerate(paxos.replicas):
+    #     print(i,r, file=sys.stderr)
 
 class MyThread(Thread):
     def __init__(self):
@@ -73,7 +81,7 @@ class MyThread(Thread):
         self.start()
     
     def run(self):
-        print('start listening to k8s api to list replicas')
+        print('start listening to k8s api to list replicas', file=sys.stderr)
         while True:
             get_pods()
             time.sleep(1)
@@ -110,7 +118,7 @@ class OrderStatus(str, Enum):
     IN_TRANSACTION = 'IN_TRANSACTION'
     PROCESSED = 'PROCESSED'
     CANCELLED = 'CANCELLED'
-    PAYED = 'PAYED'
+    PAID = 'PAID'
 
 
 # endregion
@@ -130,6 +138,7 @@ def find_user_by_id(user_id):
 
 @app.post('/create_user')
 def create_user():
+    log('POST', '/create_user')
     # TODO create users in replication nodes, can be done asynchronous
     """
     Create User and distribute to replicas
@@ -138,29 +147,36 @@ def create_user():
     user = User()
     user_id = db.users.insert_one(user.__dict__).inserted_id
     user.set_id()
+    global payment_replicas
+    log('replicas:', *payment_replicas)
     for replica in payment_replicas:
         try:
+            log(f'putting new user on replica {replica}')
             requests.put(f'{replica}/create_user', json=user.__dict__)
         except requests.exceptions.ConnectionError as e:
             print(e, file=sys.stderr)
+    log(f'User created with id {user_id=}')
     return jsonify({'user_id': str(user_id)}), 200
 
 
 @app.put('/create_user')
 def insert_user():
     user = User.loads(request.json)
+    log('PUT', '/create_user', user)
     db.users.insert_one({'_id': ObjectId(user.user_id), **user.__dict__})
     return 'ok', 200
 
 
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
+    log('GET', f'/find_user/{user_id=}')
     user = find_user_by_id(user_id)
-    return jsonify(user), 200
+    return jsonify(user), 201
 
 
 @app.post('/add_funds/<user_id>/<amount>')
 def add_credit(user_id: str, amount: float):
+    log('POST', f'/add_funds/{user_id=}/{amount=}')
     # TODO restrict number of retries for Paxos.NOT_ACCEPTED
     app.logger.info(" requesting add funds with amount %s, and user_id %s", amount, user_id)
     amount = float(amount)
@@ -179,10 +195,12 @@ def add_credit(user_id: str, amount: float):
 
 @app.post('/pay/<user_id>/<order_id>/<amount>')
 def remove_credit(user_id: str, order_id: str, amount: float):
+    log('POST', f'/pay/{user_id=}/{order_id=}/{amount=}')
     amount = float(amount)
     user = find_user_by_id(user_id)
+    log('user found', user)
     if user['credit'] < amount:
-        return False
+        return 'INSUFFICIENT FUNDS', 200
 
     user['credit'] -= amount
     user['transaction_id'] = str(uuid.uuid4())
@@ -193,14 +211,15 @@ def remove_credit(user_id: str, order_id: str, amount: float):
         return remove_credit(user_id, order_id, amount)
     if accepted_user['transaction_id'] != user['transaction_id']:
         return remove_credit(user_id, order_id, amount)
-    payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
+    payment = {'user_id': user_id, 'order_id': order_id, 'status': OrderStatus.PAID}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))
-    return True
+    return 'PAID', 200
 
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
+    log('POST', f'/cancel/{user_id=}/{order_id=}')
     """
     Cancels the payment (should this method also add the amount of the order
     back to the users account?)
@@ -219,6 +238,7 @@ def cancel_payment(user_id: str, order_id: str):
 
 @app.post('/status/<user_id>/<order_id>')
 def payment_status(user_id: str, order_id: str):
+    log('POST', f'/status/{user_id=}/{order_id=}')
     payment = db.payments.find_one(
         {'_id': ObjectId(user_id), 'payments.order_id': order_id}
     )
@@ -227,6 +247,7 @@ def payment_status(user_id: str, order_id: str):
 
 @app.post('/prepare')
 def paxos_acceptor_prepare():
+    log('POST', '/prepare')
     content = request.json
     app.logger.info('prepare content %s', str(content))
     return paxos.acceptor_prepare(content['proposal_id'], content['proposal_value'])
@@ -234,6 +255,7 @@ def paxos_acceptor_prepare():
 
 @app.post('/accept')
 def acceptor_accept():
+    log('POST','/accept')
     content = request.json
     app.logger.info('content log %s', str(content))
     return paxos.acceptor_accept(content['accepted_id'], content['accepted_value'])
@@ -241,6 +263,7 @@ def acceptor_accept():
 
 @app.post('/prepare_pay/<user_id>/<amount>')
 def prepare_pay(user_id: str, amount: float):
+    log('POST', f'/prepare_pay/{user_id=}/{amount=}')
     amount = float(amount)
     user = find_user_by_id(user_id)
 
@@ -252,6 +275,7 @@ def prepare_pay(user_id: str, amount: float):
 
 @app.post('/rollback_pay/<user_id>/<amount>')
 def rollback_pay(user_id: str, amount: float):
+    log('POST', f'/rollback_pay/{user_id=}/{amount=}')
     status = add_credit(user_id, amount)
     if status:
         return 'Rolled back successfully', 200
@@ -261,8 +285,12 @@ def rollback_pay(user_id: str, amount: float):
 
 @app.post('/commit_pay/<user_id>/<order_id>/<amount>')
 def commit_pay(user_id: str, order_id: str, amount: float):
+    log('POST', f'/commit_pay/{user_id=}/{order_id=}/{amount=}')
     status = remove_credit(user_id, order_id, amount)
     if status:
         return 'Committed successfully', 200
     else:
         return 'Could not commit', 400
+
+def log(*args):
+    print(f'[{datetime.datetime.now()}]', *args, file=sys.stderr)

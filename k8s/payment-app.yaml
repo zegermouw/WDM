@@ -27,14 +27,7 @@ spec:
     spec:
       containers:
         - name: payment
-          image: mwschutte/payment:latest
-          resources:
-            limits:
-              memory: "1Gi"
-              cpu: "1"
-            requests:
-              memory: "1Gi"
-              cpu: "1"
+          image: markodorko/payment:latest
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app", --threads 3, --worker-class=gevent, --worker-connections=1000]
           ports:
