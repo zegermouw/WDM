@@ -14,7 +14,7 @@ from bson.json_util import dumps
 import kubernetes as k8s
 import threading
 Thread = threading.Thread
-
+import time
 
 
 #flask app
@@ -25,6 +25,10 @@ app = Flask("stock-service")
 client = MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = client['local']
 
+# read quorum write quorum config
+# TODO consider different write_quorum for add stock and subtract stock
+read_quorum = int(os.environ['READ_QUORUM'])
+write_quorum = int(os.environ['WRITE_QUORUM'])
 
 # pod events:
 DELETED = "DELETED"
@@ -41,33 +45,6 @@ print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
 
 
-def threaded_task():
-    """
-    Threaded task listens to k8s api event and loads all replicas
-    """
-    print('Setting up k8s api event listener', file=sys.stderr)
-    w = k8s.watch.Watch()
-    for event in w.stream(v1.list_pod_for_all_namespaces, timeout_seconds=10):
-        pod = event['object']
-        print("Event: %s %s %s" % (
-            event['type'],
-            event['object'].kind,
-            event['object'].metadata.name)
-        ,file=sys.stderr)
-        if 'stock-deployment' in pod.metadata.name:
-            # if there is a new stock-deployment event, refetch al active stock ip
-            get_pods()
-            if event['type'] == DELETED:
-                if pod.metadata.name in replicas:
-                    replicas.pop(pod.metadata.name)
-
-
-# tread to listen to k8s api
-thread = Thread(target=threaded_task)
-thread.daemon = True
-thread.start()
-
-
 replicas = {}
 def get_pods():
     """
@@ -75,20 +52,28 @@ def get_pods():
     TODO add extra check after timeout to check if its still alive since shuting down can take some time. (try something like javascript timeout)
     """
     global replicas
-    replicas = {}
+    new_replicas = {}
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
     for pod in pod_list.items:
         if(pod.metadata.name != hostname and "stock-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
             url = f'http://{pod.status.pod_ip}:5000'
-            try:
-                response = requests.get(f'{url}/alive/{hostname}/{IPAddr}')
-                if response.status_code == 200:
-                    replicas[pod.metadata.name] = url 
-            except requests.exceptions.ConnectionError as e:
-                if pod.metadata.name in replicas:
-                    replicas.pop(pod.metadata.name)
-                print(e, file=sys.stderr)
+            new_replicas[pod.metadata.name] = url 
+    replicas = new_replicas
 
+
+class MyThread(Thread):
+    def __init__(self):
+        Thread.__init__(self)
+        self.daemon = True
+        self.start()
+    
+    def run(self):
+        while True:
+            get_pods()
+            time.sleep(1)
+
+
+MyThread()
 
 # update service with other logs
 
@@ -126,10 +111,6 @@ def update_stock_from_log(to_be_updated):
 
 
 
-# read quorum write quorum config
-# TODO consider different write_quorum for add stock and subtract stock
-read_quorum = 1
-write_quorum = 1
 
 
 def close_db_connection():
@@ -153,7 +134,8 @@ def get_stock_by_id(item_id: str):
 def get_quorum_samples(quorum: int):
     return random.sample(list(replicas.keys()), min(len(replicas), quorum))
 
-
+def get_quorum_samples_addresses(quorum: int):
+    return random.sample(list(replicas.values()), min(len(replicas), quorum))
 
 def add_stock_to_db(stock_update: StockUpdate) -> Stock:
     stock = db.stock.find_one_and_update(
@@ -165,9 +147,9 @@ def add_stock_to_db(stock_update: StockUpdate) -> Stock:
         # stock did not exist: insert stock
         stock = Stock(item_id=stock_update.item_id, stock=stock_update.amount, price=stock_update.price)
         db.stock.insert_one({'_id': ObjectId(stock.item_id), **stock.__dict__})
-        stock.load_id()
     else:
         stock = Stock.loads(stock)
+    stock.load_id()
     stock_update.price = stock.price
     if stock_update.update_id is None:
         db.stock_updates.insert_one(stock_update.__dict__)
@@ -178,7 +160,8 @@ def add_stock_to_db(stock_update: StockUpdate) -> Stock:
             **stock_update.__dict__
         })
     print('created stock_update with id:' + str(stock_update))
-    return stock 
+    stock_update.load_id()
+    return stock, stock_update
 
 
 @app.get('/alive/<hostname>/<ip_address>')
@@ -207,9 +190,8 @@ def create_item(price: int):
     stock_update.load_id()
 
     # Send stock item to write_quorum
-    candidates = get_quorum_samples(write_quorum)
-    for i in candidates:
-        replica_address = replicas[i]
+    candidates = get_quorum_samples_addresses(write_quorum)
+    for replica_address in candidates:
         response = requests.put(replica_address + '/item/create', json={
             'item': stock.__dict__,
             'stock_update': stock_update.__dict__
@@ -261,11 +243,10 @@ def find_item(item_id: str):
         return 'stock not found', 400
 
     # get stock on read_quorum -1 instance 
-    candidates = get_quorum_samples(read_quorum)
+    candidates = get_quorum_samples_addresses(read_quorum)
     stock_replicas = []
     stock_replicas.append(stock)
-    for i in candidates:
-        replica_address = replicas[i]
+    for replica_address in candidates:
         response = requests.get(f'{replica_address}/find_one/{item_id}')
         if response.status_code == 200:
             stock = stock.loads(response.json())
@@ -284,7 +265,7 @@ def add_amount_to_one(item_id: str, amount: int):
     Add amount to only one node
     """
     stock_update = StockUpdate.loads(request.json)
-    stock = add_stock_to_db(stock_update)
+    stock, _ = add_stock_to_db(stock_update)
     return stock.dumps(), 200
 
 
@@ -300,12 +281,11 @@ def add_stock(item_id: str, amount: int):
     amount = int(amount)
     stock_update = StockUpdate(item_id = item_id, amount=amount, 
         node=hostname)
-    stock = add_stock_to_db(stock_update)
+    stock, stock_update = add_stock_to_db(stock_update)
     print('stock_update id '+ str(stock_update.update_id), file=sys.stderr)
     # write stock to quorum
-    candidates = get_quorum_samples(read_quorum)
-    for i in candidates:
-        replica_address = replicas[i]
+    candidates = get_quorum_samples_addresses(read_quorum)
+    for replica_address in candidates:
         response = requests.post(f'{replica_address}/add_one/{item_id}/{amount}', json=stock_update.__dict__)
     return stock.dumps(), 200
 
@@ -348,11 +328,10 @@ def remove_stock(item_id: str, amount: int):
     if stock.stock < amount:
         return "Not enough stock", 400
     
-    candidates = get_quorum_samples(read_quorum)
+    candidates = get_quorum_samples_addresses(read_quorum)
     succeeded_candidate_urls = []
     failed = False
-    for c in candidates:
-        replication_address = replicas[c]
+    for replication_address in candidates:
         response = requests.post(f'{replication_address}/{item_id}/{amount}')
         if response.status_code == 200:
             succeeded_candidate_urls.append(replication_address)
