@@ -2,8 +2,6 @@ import requests
 from requests import Response
 
 # TODO: will change in Kubernetes
-ORDER_URL = STOCK_URL = PAYMENT_URL = COORDINATOR_URL = "http://host.docker.internal:8000"
-ORDER_SERVICE = "http://order-service:5000"
 COORDINATOR_SERVICE = "http://coordinator-service:5000"
 STOCK_SERVICE = "http://stock-service:5000"
 
