@@ -48,7 +48,7 @@ def get_pods():
 def log_iterator(pods, log):
     for replica_url in pods.values():
         try:
-            response = requests.get(f'{replica_url}/log', json=log)
+            response = requests.post(f'{replica_url}/log', json=log)
         except requests.exceptions.ConnectionError as e:
             print(str(e), file=sys.stderr)
             continue

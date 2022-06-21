@@ -121,6 +121,7 @@ def update_log(central_log):
 def update_stock_from_log(to_be_updated):
     for update_item in to_be_updated.values():
         su = StockUpdate.loads(update_item)
+        print('updating stock:' + str(update_item), file=sys.stderr)
         add_stock_to_db(su)
 
 
@@ -162,14 +163,21 @@ def add_stock_to_db(stock_update: StockUpdate) -> Stock:
     )
     if stock == None:
         # stock did not exist: insert stock
-        stock = Stock.loads(item_id=stock_update.item_id, amount=stock_update.amount, price=stock_update.price)
+        stock = Stock(item_id=stock_update.item_id, stock=stock_update.amount, price=stock_update.price)
         db.stock.insert_one({'_id': ObjectId(stock.item_id), **stock.__dict__})
         stock.load_id()
     else:
         stock = Stock.loads(stock)
     stock_update.price = stock.price
-    db.stock_updates.insert_one(stock_update.__dict__)
-    stock_update.load_id()
+    if stock_update.update_id is None:
+        db.stock_updates.insert_one(stock_update.__dict__)
+        #stock_update.load_id()
+    else:
+        db.stock_updates.insert_one({
+            '_id': ObjectId(stock_update.update_id), 
+            **stock_update.__dict__
+        })
+    print('created stock_update with id:' + str(stock_update))
     return stock 
 
 
@@ -194,12 +202,18 @@ def create_item(price: int):
     stock = Stock(price=int(price))
     db.stock.insert_one(stock.__dict__)
     stock.item_id = str(stock.__dict__.pop('_id'))
+    stock_update = StockUpdate(item_id=stock.item_id, amount=0, node=hostname, price=price )
+    db.stock_updates.insert_one(stock_update.__dict__)
+    stock_update.load_id()
 
     # Send stock item to write_quorum
     candidates = get_quorum_samples(write_quorum)
     for i in candidates:
         replica_address = replicas[i]
-        response = requests.put(replica_address + '/item/create', json=stock.__dict__)
+        response = requests.put(replica_address + '/item/create', json={
+            'item': stock.__dict__,
+            'stock_update': stock_update.__dict__
+            })
         # TODO check if the requests are ok and handle accordingly if they fail
         if response.status_code != 200:
             print(response, file=sys.stderr)
@@ -208,8 +222,16 @@ def create_item(price: int):
 
 @app.put('/item/create')
 def insert_item():
-    item = Stock.loads(request.json)
+    json = request.json
+    item_json = json['item']
+    stock_update_json = json['stock_update']
+    item = Stock.loads(item_json)
+    stock_update = StockUpdate.loads(stock_update_json)
     db.stock.insert_one({'_id': ObjectId(item.item_id), **item.__dict__})
+    db.stock_updates.insert_one({
+        '_id': ObjectId(stock_update.update_id), 
+        **stock_update.__dict__
+        })
     print(f'CREATED item with item id {item.item_id}', file=sys.stderr)
     return 'ok', 200
 
@@ -341,7 +363,7 @@ def remove_stock(item_id: str, amount: int):
     
     if failed:
         for replication_address in succeeded_candidate_urls:
-            request.post(f'{replication_address}/add_one/{item_id}/{amount}')
+            requests.post(f'{replication_address}/add_one/{item_id}/{amount}')
 
     stock = db.stock.find_one_and_update(
         {'_id': ObjectId(str(item_id))},
@@ -352,11 +374,11 @@ def remove_stock(item_id: str, amount: int):
     return stock.dumps(), 200 
 
 
-@app.get('/log')
+@app.post('/log')
 def get_stock_update_log_response():
     stock_update_log = get_stock_update_log()
     # todo make this async such that call return without updating own log first might be faster
     logs =  request.json
-    if logs != None:
+    if logs != None and len(logs)>0:
         update_log(logs)    
     return dumps(stock_update_log), 200
