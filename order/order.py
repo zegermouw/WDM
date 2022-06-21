@@ -1,4 +1,4 @@
-import json
+from flask import jsonify
 import sys
 from dataclasses import dataclass
 from typing import List
@@ -24,7 +24,8 @@ class Order:
         return {'_id': self.order_id, **self.__dict__}
 
     def dumps(self):
-        return {'user_id': self.user_id, 'order_id': self.order_id, 'items': self.items}
+        # return jsonify({'user_id': self.user_id, 'order_id': self.order_id, 'items': self.items})
+        return jsonify(self.__dict__)
 
     @staticmethod
     def loads(input_dict):

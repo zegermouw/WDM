@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: stockupdater
-          image: mwschutte/stockupdater:latest 
+          image: sree2712/stockupdater:latest 
           resources:
             limits:
               memory: "1Gi"

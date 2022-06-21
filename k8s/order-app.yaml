@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: order
-          image: zegermouw/order:latest
+          image: sree2712/order:latest
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app"]
           ports:
