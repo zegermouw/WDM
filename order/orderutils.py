@@ -1,7 +1,6 @@
 import requests
 from requests import Response
 
-# TODO: will change in Kubernetes
 COORDINATOR_SERVICE = "http://coordinator-service:5000"
 STOCK_SERVICE = "http://stock-service:5000"
 
