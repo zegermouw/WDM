@@ -1,7 +1,7 @@
 import atexit
 import os
 from enum import Enum
-
+import time
 from flask import Flask, jsonify, request, logging
 
 import sys
@@ -41,32 +41,6 @@ print(hostname, file=sys.stderr)
 print("running on: " + IPAddr, file=sys.stderr)
 
 
-def threaded_task():
-    """
-    Threaded task listens to k8s api event and loads all replicas
-    """
-    print('Setting up k8s api event listener', file=sys.stderr)
-    w = k8s.watch.Watch()
-    for event in w.stream(v1.list_pod_for_all_namespaces, timeout_seconds=10):
-        pod = event['object']
-        print("Event: %s %s %s" % (
-            event['type'],
-            event['object'].kind,
-            event['object'].metadata.name)
-        ,file=sys.stderr)
-        if 'payment-deployment' in pod.metadata.name:
-            # if there is a new stock-deployment event, refetch al active stock ip
-            get_pods()
-            if event['type'] == DELETED:
-                if pod.metadata.name in replicas:
-                    replicas.pop(pod.metadata.name)
-
-
-# tread to listen to k8s api
-thread = Thread(target=threaded_task)
-thread.daemon = True
-thread.start()
-
 
 myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
@@ -74,31 +48,38 @@ replicas = {}
 payment_replicas: list[str] = []
 replication_number = random.randint(0,100) #use random integer as unique replication id number 
 paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
+
 def get_pods():
     """
     Gets replica ip addresses and stores them im replicas set
     TODO add extra check after timeout to check if its still alive since shuting down can take some time. (try something like javascript timeout)
     """
     global replicas
-    global payment_replicas
-    replicas = {}
+    new_replicas = {}
     pod_list = v1.list_pod_for_all_namespaces(watch=False)
     for pod in pod_list.items:
         if(pod.metadata.name != hostname and "payment-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
             url = f'http://{pod.status.pod_ip}:5000'
-            try:
-                response = requests.get(f'{url}/alive/{hostname}/{IPAddr}')
-                if response.status_code == 200:
-                    replicas[pod.metadata.name] = url 
-            except requests.exceptions.ConnectionError as e:
-                if pod.metadata.name in replicas:
-                    replicas.pop(pod.metadata.name)
-                print(e, file=sys.stderr)
-    print('replicas:'+str(replicas), file=sys.stderr)
+            new_replicas[pod.metadata.name] = url 
+    replicas = new_replicas
     payment_replicas = list(replicas.values())
-    paxos.replicas = payment_replicas
+    if sorted(paxos.replicas) != sorted(payment_replicas):
+        paxos.replicas = payment_replicas
+
+class MyThread(Thread):
+    def __init__(self):
+        Thread.__init__(self)
+        self.daemon = True
+        self.start()
+    
+    def run(self):
+        print('start listening to k8s api to list replicas')
+        while True:
+            get_pods()
+            time.sleep(1)
 
 
+MyThread()
 
 
 # for testing purposes
