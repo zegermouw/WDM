@@ -16,7 +16,7 @@ kind: Deployment
 metadata:
   name: stock-deployment
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       component: stock
@@ -44,6 +44,10 @@ spec:
               value: "mongodb://localhost:27018/db"
             - name: PORT
               value: "27018"
+            - name: READ_QUORUM
+              value: "1"
+            - name: WRITE_QUORUM
+              value: "2"
         - name: stock-db
           args:
             - mongod

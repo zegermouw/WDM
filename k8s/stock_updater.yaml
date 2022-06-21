@@ -1,0 +1,40 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: stockupdater-service
+spec:
+  type: LoadBalancer
+  selector:
+    component: stockupdater
+  ports:
+    - port: 5000
+      name: http
+      targetPort: 5000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stockupdater-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: stockupdater
+  template:
+    metadata:
+      labels:
+        component: stockupdater
+    spec:
+      containers:
+        - name: stockupdater
+          image: mwschutte/stockupdater:latest 
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+            requests:
+              memory: "1Gi"
+              cpu: "1"
+          command: ["gunicorn"]
+          args: ["-b", "0.0.0.0:5000", "app:app", --threads 2]
