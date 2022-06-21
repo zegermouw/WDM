@@ -1,38 +1,107 @@
 import atexit
 import os
 from enum import Enum
-from flask import Flask, request, logging
-import json
+import time
+from flask import Flask, jsonify, request, logging
+
+import sys
 import requests
-from bson import json_util
 import pymongo
 from pymongo import ReturnDocument
 from bson.objectid import ObjectId
+from bson.json_util import dumps
 import uuid
-
 
 from models import User
 from paxos import Paxos
+import kubernetes as k8s
+import threading
+import random
+Thread = threading.Thread
+import socket
+
+
 
 app = Flask("payment-service")
 
+
+
+# pod events:
+DELETED = "DELETED"
+ADDED = 'ADDED'
+MODIFIED = 'MODIFIED' 
+
+
+# get replica pods using kubernets api
+k8s.config.load_incluster_config()
+v1 = k8s.client.CoreV1Api()
+hostname=socket.gethostname()
+IPAddr=socket.gethostbyname(hostname)
+print(hostname, file=sys.stderr)
+print("running on: " + IPAddr, file=sys.stderr)
+
+
+
 myclient = pymongo.MongoClient(os.environ['GATEWAY_URL'], int(os.environ['PORT']))
 db = myclient["local"]
-payment_replicas: list[str] = [os.environ['OTHER_NODE']]
-port = '5000'
-for i in range(len(payment_replicas)):
-    s = payment_replicas[i]
-    payment_replicas[i] = s + ':' + port
+replicas = {}
+payment_replicas: list[str] = []
+replication_number = random.randint(0,100) #use random integer as unique replication id number 
+paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
 
-replication_number = int(os.environ['REPLICATION_NUMBER'])
+def get_pods():
+    """
+    Gets replica ip addresses and stores them im replicas set
+    TODO add extra check after timeout to check if its still alive since shuting down can take some time. (try something like javascript timeout)
+    """
+    global replicas
+    new_replicas = {}
+    pod_list = v1.list_pod_for_all_namespaces(watch=False)
+    for pod in pod_list.items:
+        if(pod.metadata.name != hostname and "payment-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
+            url = f'http://{pod.status.pod_ip}:5000'
+            new_replicas[pod.metadata.name] = url 
+    replicas = new_replicas
+    payment_replicas = list(replicas.values())
+    if sorted(paxos.replicas) != sorted(payment_replicas):
+        paxos.replicas = payment_replicas
+
+class MyThread(Thread):
+    def __init__(self):
+        Thread.__init__(self)
+        self.daemon = True
+        self.start()
+    
+    def run(self):
+        print('start listening to k8s api to list replicas')
+        while True:
+            get_pods()
+            time.sleep(1)
+
+
+MyThread()
+
+
+# for testing purposes
+@app.get('/pods')
+def config_pods():
+    return dumps(replicas)
+
+
+@app.get('/alive/<hostname>/<ip_address>')
+def im_alive(hostname: str, ip_address: str):
+    replicas[hostname] = f'http://{ip_address}:5000'
+    return 'ok', 200
+
+
+
 
 def close_db_connection():
     myclient.close()
 
 
 atexit.register(close_db_connection)
-base_url = "http://host.docker.internal"
-paxos = Paxos(payment_replicas, db, replication_number, logger=app.logger)
+
 
 # region MODEL
 
@@ -67,11 +136,14 @@ def create_user():
     :return: User object and status 200 if everything ok.
     """
     user = User()
-    db.users.insert_one(user.__dict__)
+    user_id = db.users.insert_one(user.__dict__).inserted_id
     user.set_id()
     for replica in payment_replicas:
-        requests.put(replica + '/create_user', json=user.__dict__)
-    return user.dumps(), 200
+        try:
+            requests.put(f'{replica}/create_user', json=user.__dict__)
+        except requests.exceptions.ConnectionError as e:
+            print(e, file=sys.stderr)
+    return jsonify({'user_id': str(user_id)}), 200
 
 
 @app.put('/create_user')
@@ -84,15 +156,14 @@ def insert_user():
 @app.get('/find_user/<user_id>')
 def find_user(user_id: str):
     user = find_user_by_id(user_id)
-    return str(json.dumps(user, default=json_util.default)), 200
+    return jsonify(user), 200
 
 
-times = 0
 @app.post('/add_funds/<user_id>/<amount>')
-def add_credit(user_id: str, amount: int):
+def add_credit(user_id: str, amount: float):
     # TODO restrict number of retries for Paxos.NOT_ACCEPTED
-    app.logger.info("times: %s, requesting add funds with amount %s, and user_id %s", i, amount, user_id)
-    amount = int(amount)
+    app.logger.info(" requesting add funds with amount %s, and user_id %s", amount, user_id)
+    amount = float(amount)
     user = find_user_by_id(user_id)
     user['credit'] += amount
     transaction_id = str(uuid.uuid4())
@@ -100,17 +171,18 @@ def add_credit(user_id: str, amount: int):
     response, accepted_user = paxos.proposer_prepare(user)
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
-        return add_credit(user_id, amount) 
-    if accepted_user['transaction_id']!=user['transaction_id']:     
+        return add_credit(user_id, amount)
+    if accepted_user['transaction_id'] != user['transaction_id']:
         return add_credit(user_id, amount)
     return 'ACCEPTED', 200
 
+
 @app.post('/pay/<user_id>/<order_id>/<amount>')
-def remove_credit(user_id: str, order_id: str, amount: int):
-    amount = int(amount)
+def remove_credit(user_id: str, order_id: str, amount: float):
+    amount = float(amount)
     user = find_user_by_id(user_id)
     if user['credit'] < amount:
-        return 'Insufficient credit', 400
+        return False
 
     user['credit'] -= amount
     user['transaction_id'] = str(uuid.uuid4())
@@ -118,19 +190,19 @@ def remove_credit(user_id: str, order_id: str, amount: int):
 
     # go trough another round of paxos when not accepted, retry... once
     if response == Paxos.NOT_ACCEPTED:
-        return remove_credit(user_id, order_id, amount) 
-    if accepted_user['transaction_id']!=user['transaction_id']:     
+        return remove_credit(user_id, order_id, amount)
+    if accepted_user['transaction_id'] != user['transaction_id']:
         return remove_credit(user_id, order_id, amount)
     payment = {'user_id': user_id, 'status': OrderStatus.PAYED}
     db.payments.insert_one(payment)
     payment['payment_id'] = str(payment.pop('_id'))
-    return json.dumps(payment), 200
+    return True
 
 
 @app.post('/cancel/<user_id>/<order_id>')
 def cancel_payment(user_id: str, order_id: str):
     """
-    Cancels the payment (should this method alsoa dd the amount of the order
+    Cancels the payment (should this method also add the amount of the order
     back to the users account?)
     :param user_id:
     :param order_id:
@@ -142,7 +214,7 @@ def cancel_payment(user_id: str, order_id: str):
         return_document=ReturnDocument.AFTER
     )
     payment['payment_id'] = str(payment.pop('_id'))
-    return json.dumps(payment), 200
+    return jsonify(payment), 200
 
 
 @app.post('/status/<user_id>/<order_id>')
@@ -167,10 +239,30 @@ def acceptor_accept():
     return paxos.acceptor_accept(content['accepted_id'], content['accepted_value'])
 
 
-@app.get('/hallo')
-def hallo():
-    return json.dumps(payment_replicas), 200
+@app.post('/prepare_pay/<user_id>/<amount>')
+def prepare_pay(user_id: str, amount: float):
+    amount = float(amount)
+    user = find_user_by_id(user_id)
 
-# requests.post("http://host.docker.internal:8000/payment/alive")
+    if user['credit'] < amount:
+        return 'Insufficient credit', 400
+    else:
+        return 'Prepare of payment successful', 200
 
-# endregion
+
+@app.post('/rollback_pay/<user_id>/<amount>')
+def rollback_pay(user_id: str, amount: float):
+    status = add_credit(user_id, amount)
+    if status:
+        return 'Rolled back successfully', 200
+    else:
+        return 'Could not rollback', 400
+
+
+@app.post('/commit_pay/<user_id>/<order_id>/<amount>')
+def commit_pay(user_id: str, order_id: str, amount: float):
+    status = remove_credit(user_id, order_id, amount)
+    if status:
+        return 'Committed successfully', 200
+    else:
+        return 'Could not commit', 400

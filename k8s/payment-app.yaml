@@ -16,7 +16,7 @@ kind: Deployment
 metadata:
   name: payment-deployment
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       component: payment
@@ -27,9 +27,16 @@ spec:
     spec:
       containers:
         - name: payment
-          image: zegermouw/payment:latest
+          image: mwschutte/payment:latest
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+            requests:
+              memory: "1Gi"
+              cpu: "1"
           command: ["gunicorn"]
-          args: ["-b", "0.0.0.0:5000", "app:app"]
+          args: ["-b", "0.0.0.0:5000", "app:app", --threads 3, --worker-class=gevent, --worker-connections=1000]
           ports:
             - containerPort: 5000
           env:
@@ -37,11 +44,7 @@ spec:
               value: "mongodb://localhost:27018/db"
             - name: PORT
               value: "27018"
-            - name: OTHER_NODE
-              value: "http://payment-service"
-            - name: REPLICATION_NUMBER
-              value: "1"
-        - name: payment-db
+        - name: stock-db
           args:
             - mongod
             - --port
@@ -49,4 +52,3 @@ spec:
           image: mongo
           ports:
             - containerPort: 27018
-

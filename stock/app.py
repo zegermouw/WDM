@@ -7,6 +7,10 @@ import atexit
 from bson import ObjectId
 from flask import Flask, request 
 from pymongo import MongoClient, ReturnDocument
+import sys
+
+from flask import Flask, request, Response, jsonify
+import redis
 from stock import Stock
 import random
 from stock_update import StockUpdate
@@ -16,8 +20,6 @@ import threading
 Thread = threading.Thread
 import time
 
-
-#flask app
 app = Flask("stock-service")
 
 
@@ -33,7 +35,7 @@ write_quorum = int(os.environ['WRITE_QUORUM'])
 # pod events:
 DELETED = "DELETED"
 ADDED = 'ADDED'
-MODIFIED = 'MODIFIED' 
+MODIFIED = 'MODIFIED'
 
 
 # get replica pods using kubernets api
@@ -58,7 +60,8 @@ def get_pods():
         if(pod.metadata.name != hostname and "stock-deployment" in pod.metadata.name and pod.status.phase == 'Running'):
             url = f'http://{pod.status.pod_ip}:5000'
             new_replicas[pod.metadata.name] = url 
-    replicas = new_replicas
+    if sorted(list(replicas.values())) != sorted(list(new_replicas.values())):
+        replicas = new_replicas
 
 
 class MyThread(Thread):
@@ -108,9 +111,6 @@ def update_stock_from_log(to_be_updated):
         su = StockUpdate.loads(update_item)
         print('updating stock:' + str(update_item), file=sys.stderr)
         add_stock_to_db(su)
-
-
-
 
 
 def close_db_connection():
@@ -252,11 +252,11 @@ def find_item(item_id: str):
         if response.status_code == 200:
             stock = stock.loads(response.json())
             stock_replicas.append(stock)
-    
+
     for replica in stock_replicas:
         if replica.stock < stock.stock:
             stock.stock = replica.stock
-    
+
     return stock.dumps(), 200
 
 
@@ -280,7 +280,7 @@ def add_stock(item_id: str, amount: int):
     """
     # write stock update to db
     amount = int(amount)
-    stock_update = StockUpdate(item_id = item_id, amount=amount, 
+    stock_update = StockUpdate(item_id = item_id, amount=amount,
         node=hostname)
     stock, stock_update = add_stock_to_db(stock_update)
     print('stock_update id '+ str(stock_update.update_id), file=sys.stderr)
@@ -307,7 +307,7 @@ def remove_stock(item_id: str, amount: int):
     Remove stock from item with given id.
         - Try to remove from write quorum.
         - If one fails, rollback and add amount back to nodes that did succeed.
-        - Write stock_update to log only after success, to own node. also keep track of failed 
+        - Write stock_update to log only after success, to own node. also keep track of failed
             stock_update to be able to remove them at other nodes.
     :param item_id: The item to subtract amount from.
     :param amount: The amount to remove from the stock.
@@ -343,7 +343,7 @@ def remove_stock(item_id: str, amount: int):
             failed = True
             break
         succeeded_candidate_urls.append(replication_address)
-    
+
     if failed:
         # if one failed write back the stock.
         stock_update = StockUpdate(item_id=item_id, amount=amount, node=hostname)

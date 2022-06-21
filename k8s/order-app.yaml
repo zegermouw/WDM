@@ -16,7 +16,7 @@ kind: Deployment
 metadata:
   name: order-deployment
 spec:
-  replicas: 1
+  replicas: 4
   selector:
     matchLabels:
       component: order
@@ -27,14 +27,7 @@ spec:
     spec:
       containers:
         - name: order
-          image: mwschutte/order:latest
-          resources:
-            limits:
-              memory: "1Gi"
-              cpu: "1"
-            requests:
-              memory: "1Gi"
-              cpu: "1"
+          image: zegermouw/order:latest
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app"]
           ports:
@@ -44,9 +37,9 @@ spec:
               value: "payment-service"
             - name: STOCK_SERVICE_URL
               value: "stock-service"
-            - name: ORDER_GATEWAY
+            - name: GATEWAY_URL
               value: "mongodb://localhost:27018/db"
-            - name: ORDER_PORT
+            - name: PORT
               value: "27018"
         - name: order-db
           args:
@@ -56,4 +49,7 @@ spec:
           image: mongo
           ports:
             - containerPort: 27018
+
+
+
 

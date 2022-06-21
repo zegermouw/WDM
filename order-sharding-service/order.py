@@ -1,5 +1,4 @@
 import json
-import sys
 from dataclasses import dataclass
 from typing import List
 
@@ -24,8 +23,9 @@ class Order:
         return {'_id': self.order_id, **self.__dict__}
 
     def dumps(self):
-        return {'user_id': self.user_id, 'order_id': self.order_id, 'items': self.items}
+        return json.dumps(self.__dict__)
 
     @staticmethod
     def loads(input_dict):
-        return Order(input_dict['user_id'], input_dict['order_id'], input_dict['items'])
+        input_dict['order_id'] = str(input_dict.pop('_id'))
+        return Order(**input_dict)

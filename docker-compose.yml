@@ -12,6 +12,8 @@ services:
     container_name: order-db
     image: mongo
     command: mongod --port 27018
+    logging:
+      driver: "none"
     volumes:
       - ./data:/data/db
     ports:
@@ -24,22 +26,22 @@ services:
     env_file:
       - env/order_mongo.env
 
+#  order-db:
+#    image: redis:latesta
+#    command: redis-server --requirepass redis --maxmemory 512mb
 
   stock-service:
     build: ./stock
     image: stock:latest
     command: gunicorn -b 0.0.0.0:5000 app:app
     env_file:
-      - env/stock_mongo.env
+      - env/stock_redis.env
 
   stock-db:
-    container_name: stock-db
-    image: mongo
-    command: mongod --port 27020
-    volumes:
-      - ./data:/data/db_stock
-    ports:
-      - "27020:27020"
+    image: redis:latest
+    logging:
+      driver: "none"
+    command: redis-server --requirepass redis --maxmemory 512mb
 
   payment-service0:
     build: ./payment
@@ -70,10 +72,16 @@ services:
       - FLASK_ENV=development
 
 
+  coordinator-service:
+    build: ./coordinator
+    image: coordinator:latest
+    command: gunicorn -b 0.0.0.0:5000 app:app
 
   payment-db0:
     container_name: payment-db0
     image: mongo
+    logging:
+      driver: "none"
     ports:
       - "27017:27017"
     volumes:
@@ -82,6 +90,8 @@ services:
   payment-db1:
     container_name: payment-db1
     image: mongo
+    logging:
+      driver: "none"
     ports:
       - "27019:27019"
     command: mongod --port 27019
