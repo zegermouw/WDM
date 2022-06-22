@@ -123,3 +123,7 @@ def checkout(order_id):
 @app.get('/test')
 def test_get2():
     return "test", 200
+
+
+def log(*args):
+    print(f'[{datetime.datetime.now()}]', *args, file=sys.stderr)

@@ -2,11 +2,11 @@ import requests
 
 user_id = requests.post("http://localhost/payment/create_user").json()['user_id']
 
-print(user_id)
+print(f'{user_id=}')
 
 ret0 = requests.post('http://localhost/payment/add_funds/' + user_id + '/2000')
 
-print(ret0.json())
+print(ret0, ret0.text)
 
 order_id = requests.post('http://localhost/orders-shard/create/' + str(user_id)).json()['order_id']
 

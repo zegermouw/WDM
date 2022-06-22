@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: order-sharding
-          image: zegermouw/order-sharding:latest
+          image: markodorko/order-sharding:latest
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app"]
           ports:

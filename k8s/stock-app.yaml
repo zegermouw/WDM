@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: stock
-          image: sree2712/stock:latest
+          image: markodorko/stock:latest
           command: ["gunicorn"]
           args: ["-b", "0.0.0.0:5000", "app:app", --threads 3, --worker-class=gevent, --worker-connections=1000]
           ports:

@@ -24,8 +24,7 @@ class Order:
         return {'_id': self.order_id, **self.__dict__}
 
     def dumps(self):
-        # return jsonify({'user_id': self.user_id, 'order_id': self.order_id, 'items': self.items})
-        return jsonify(self.__dict__)
+        return jsonify({'user_id': self.user_id, 'order_id': self.order_id, 'items': self.items})
 
     @staticmethod
     def loads(input_dict):

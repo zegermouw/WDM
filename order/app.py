@@ -69,6 +69,7 @@ def create_order(user_id, order_id):
     order = Order(user_id=user_id, order_id=order_id)
     db.orders.insert_one(order.__dict__)
     # db_queue.append(order)
+    # order.order_id = str(order.__dict__.pop('_id'))
     print(str(order.dumps()), file=sys.stderr)
     return order.dumps(), 200
 
