@@ -12,7 +12,7 @@ def pay_order(user_id, order_id, price):
     # boolean value specifies if items should be locked too, can be removed if we want a less strict 2PC
     if is_user_item_locked(user_id, item_ids):
         return 'Could not satisfy request as the user or item(s) are locked', 403
-    lock(user_id, item_ids, False)
+    lock(user_id, item_ids, True)
     if not is_user_item_locked(user_id, item_ids):
         return 'Error during locking', 500
 

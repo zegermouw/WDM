@@ -70,8 +70,9 @@ def create_order(user_id, order_id):
     db.orders.insert_one(order.__dict__)
     # db_queue.append(order)
     # order.order_id = str(order.__dict__.pop('_id'))
-    print(str(order.dumps()), file=sys.stderr)
-    return order.dumps(), 200
+    order.__dict__.pop('_id')
+    print(str(jsonify(order.__dict__)), file=sys.stderr)
+    return jsonify(order.__dict__), 200
 
 
 @app.delete('/remove/<order_id>')

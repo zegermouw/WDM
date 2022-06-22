@@ -145,7 +145,8 @@ def add_stock_to_db(stock_update: StockUpdate) -> Stock:
     if stock == None:
         # stock did not exist: insert stock
         stock = Stock(item_id=stock_update.item_id, stock=stock_update.amount, price=stock_update.price)
-        db.stock.insert_one({'_id': ObjectId(stock.item_id), **stock.__dict__})
+        if db.stock.find_one({'_id': ObjectId(stock.item_id)}) == None:
+            db.stock.insert_one({'_id': ObjectId(stock.item_id), **stock.__dict__})
     else:
         stock = Stock.loads(stock)
     stock.load_id()

@@ -9,20 +9,20 @@ spec:
  rules:
    - http:
       paths:
-        - path: /orders-shard/?(.*)
+        - path: /orders/?(.*)
           pathType: Prefix
           backend:
             service:
               name: order-sharding-service
               port:
                 number: 5000
-        - path: /orders/?(.*)
-          pathType: Prefix
-          backend:
-            service:
-              name: order-service
-              port:
-                number: 5000
+        # - path: /orders/?(.*)
+        #   pathType: Prefix
+        #   backend:
+        #     service:
+        #       name: order-service
+        #       port:
+        #         number: 5000
         - path: /stock/?(.*)
           pathType: Prefix
           backend:

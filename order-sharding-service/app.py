@@ -1,6 +1,7 @@
 import requests
 from flask import Flask
 from flask import request as flask_request
+from flask import jsonify
 import kubernetes as k8s
 
 import sys
@@ -63,7 +64,7 @@ def create_order(user_id):
     if shard['ret']:
         return_val = requests.post(
             'http://' + str(shard['val']['ip']) + ':5000/create/' + str(user_id) + '/' + str(order_id))
-        return return_val.content, 200
+        return return_val.json(), return_val.status_code
     else:
         return "could not find pod", 500
 
@@ -73,7 +74,7 @@ def remove_order(order_id):
     shard = getShard(order_id)
     if shard['ret']:
         return_val = requests.delete('http://' + str(shard['val']['ip']) + ':5000/remove/' + str(order_id))
-        return return_val.content, 200
+        return return_val.content, return_val.status_code
     else:
         return "could not find pod", 500
 
@@ -84,7 +85,7 @@ def add_item(order_id, item_id):
     if shard['ret']:
         return_val = requests.post('http://' + str(shard['val']['ip'])
                                    + ':5000/addItem/' + str(order_id) + "/" + str(item_id))
-        return return_val.content, 200
+        return return_val.json(), return_val.status_code
     else:
         return "could not find pod", 500
 
@@ -95,7 +96,7 @@ def all(order_id):
     if shard['ret']:
         return_val = requests.get('http://' + str(shard['val']['ip'])
                                    + ':5000/all/' + str(order_id))
-        return return_val.content, 200
+        return return_val.content, return_val.status_code
     else:
         return "could not find pod", 500
 
@@ -105,7 +106,7 @@ def remove_item(order_id, item_id):
     if shard['ret']:
         return_val = requests.delete('http://' + str(shard['val']['ip'])
                                    + ':5000/removeItem/' + str(order_id) + "/" + str(item_id))
-        return return_val.content, 200
+        return return_val.content, return_val.status_code
     else:
         return "could not find pod", 500
 
@@ -116,7 +117,7 @@ def checkout(order_id):
     if shard['ret']:
         return_val = requests.post('http://' + str(shard['val']['ip'])
                                   + ':5000/checkout/' + str(order_id))
-        return return_val.content, 200
+        return return_val.content, return_val.status_code
     else:
         return "could not find pod", 500
 
