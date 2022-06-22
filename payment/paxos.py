@@ -101,7 +101,7 @@ class Paxos:
         return 'accepted', 200
 
     def generate_new_poposal_id(self, user_id, payment_id):
-        proposal_id = int(self.get_min_proposal_id(payment_id)) + 1 + self.replication_number/10
+        proposal_id = int(self.get_min_proposal_id(payment_id)) + 1 + self.replication_number/100
         #self.set_min_proposal_id(user_id, proposal_id) #should this be here?
         return proposal_id
 
