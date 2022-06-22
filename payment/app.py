@@ -276,21 +276,13 @@ def prepare_pay(user_id: str, amount: float):
 @app.post('/rollback_pay/<user_id>/<amount>')
 def rollback_pay(user_id: str, amount: float):
     log('POST', f'/rollback_pay/{user_id=}/{amount=}')
-    status = add_credit(user_id, amount)
-    if status:
-        return 'Rolled back successfully', 200
-    else:
-        return 'Could not rollback', 400
+    return add_credit(user_id, amount)
 
 
 @app.post('/commit_pay/<user_id>/<order_id>/<amount>')
 def commit_pay(user_id: str, order_id: str, amount: float):
     log('POST', f'/commit_pay/{user_id=}/{order_id=}/{amount=}')
-    status = remove_credit(user_id, order_id, amount)
-    if status:
-        return 'Committed successfully', 200
-    else:
-        return 'Could not commit', 400
+    return remove_credit(user_id, order_id, amount)
 
 def log(*args):
     print(f'[{datetime.datetime.now()}]', *args, file=sys.stderr)
