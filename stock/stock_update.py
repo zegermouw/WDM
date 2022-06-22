@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-import json
+from flask import jsonify
 
 @dataclass
 class StockUpdate:
@@ -12,7 +12,7 @@ class StockUpdate:
     update_id: str = None
     
     def dumps(self):
-        json.dumps(self.__dict__)
+        jsonify(self.__dict__)
     
     @staticmethod
     def loads(input_json: dict):

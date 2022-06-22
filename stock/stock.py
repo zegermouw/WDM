@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import json
+from flask import jsonify
 
 
 @dataclass
@@ -10,7 +10,7 @@ class Stock:
     stock: int = 0
 
     def dumps(self):
-        return json.dumps(self.__dict__)
+        return jsonify(self.__dict__)
 
     @staticmethod
     def loads(input_json: dict):
